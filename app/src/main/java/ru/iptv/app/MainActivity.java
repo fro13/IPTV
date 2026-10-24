@@ -139,8 +139,39 @@ public final class MainActivity extends Activity {
             frame.setOnClickListener(v->{visible=!visible;controls.setVisibility(visible?View.VISIBLE:View.GONE);status.setVisibility(visible?View.VISIBLE:View.GONE);});
         }
         setContentView(frame);
+        applyPhoneOrientation(getResources().getConfiguration());
+        getPreferences(0).edit().putInt("last",current).apply();
         startPlayer();
     }
+    // Keep the current LibVLC session and SurfaceView attached when the phone rotates.
+    // The OS delivers orientation and screen-size changes here instead of recreating the Activity.
+    @Override public void onConfigurationChanged(Configuration config) {
+        super.onConfigurationChanged(config);
+        applyPhoneOrientation(config);
+    }
+
+    private void applyPhoneOrientation(Configuration config) {
+        if (tv || !viewing) return;
+        boolean landscape=config.orientation==Configuration.ORIENTATION_LANDSCAPE;
+        if (landscape) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+            visible=false;
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+            visible=true;
+        }
+        if (controls!=null) controls.setVisibility(visible?View.VISIBLE:View.GONE);
+        if (status!=null) status.setVisibility(visible?View.VISIBLE:View.GONE);
+    }
+
     private void acquireWifi(){
         try{
             WifiManager wifi=(WifiManager)getApplicationContext().getSystemService(Context.WIFI_SERVICE);
@@ -186,6 +217,7 @@ public final class MainActivity extends Activity {
         status.setText(s);
         handler.removeCallbacks(hideStatus);
         if(tv)handler.postDelayed(hideStatus,3800);
+        else if(viewing && getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE)handler.postDelayed(()->{if(status!=null && !visible)status.setVisibility(View.GONE);},2600);
     }
     private void switchTo(int i){
         if(names.isEmpty())return;

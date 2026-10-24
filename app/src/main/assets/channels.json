@@ -1,0 +1,134 @@
+[
+  {
+    "number": 1,
+    "name": "Первый канал",
+    "url": "udp://@239.10.2.1:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 2,
+    "name": "Россия 1",
+    "url": "udp://@239.10.2.2:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 3,
+    "name": "Матч ТВ",
+    "url": "udp://@239.10.2.3:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 4,
+    "name": "Телекомпания НТВ",
+    "url": "udp://@239.10.2.4:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 5,
+    "name": "Петербург - 5 канал",
+    "url": "udp://@239.10.2.5:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 6,
+    "name": "Культура",
+    "url": "udp://@239.10.2.6:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 7,
+    "name": "Россия 24",
+    "url": "udp://@239.10.2.7:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 8,
+    "name": "Детско-юношеский телеканал «Карусель»",
+    "url": "udp://@239.10.2.8:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 9,
+    "name": "Телеканал «Общественное телевидение России»",
+    "url": "udp://@239.10.2.9:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 10,
+    "name": "ТВ ЦЕНТР - Москва",
+    "url": "udp://@239.10.2.10:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 11,
+    "name": "РЕН",
+    "url": "udp://@239.10.2.11:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 12,
+    "name": "Спас",
+    "url": "udp://@239.10.2.12:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 13,
+    "name": "СТС",
+    "url": "udp://@239.10.2.13:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 14,
+    "name": "Домашний",
+    "url": "udp://@239.10.2.14:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 15,
+    "name": "ТВ-3",
+    "url": "udp://@239.10.2.15:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 16,
+    "name": "Пятница!",
+    "url": "udp://@239.10.2.16:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 17,
+    "name": "Звезда",
+    "url": "udp://@239.10.2.17:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 18,
+    "name": "Мир",
+    "url": "udp://@239.10.2.18:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 19,
+    "name": "ТНТ",
+    "url": "udp://@239.10.2.19:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 20,
+    "name": "МУЗ-ТВ",
+    "url": "udp://@239.10.2.20:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 21,
+    "name": "Региональный канал 1",
+    "url": "udp://@239.10.2.21:5500",
+    "networkCachingMs": 1000
+  },
+  {
+    "number": 22,
+    "name": "Региональный канал 2",
+    "url": "udp://@239.10.2.22:5500",
+    "networkCachingMs": 1000
+  }
+]

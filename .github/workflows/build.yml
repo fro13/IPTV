@@ -56,20 +56,13 @@ jobs:
           fi
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
-      - name: Verify per-architecture APKs
+      - name: Verify installable APK
         run: |
-          ls -lh app/build/outputs/apk/debug/*.apk
-          test -s app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk
-          test -s app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
-      - name: Upload TV APK (ARM 32-bit)
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: IPTV-TV-armeabi-v7a-APK
-          path: app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk
-          if-no-files-found: error
-      - name: Upload phone APK (ARM 64-bit)
-        uses: actions/upload-artifact@v4
-        with:
-          name: IPTV-Phone-arm64-v8a-APK
-          path: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+          name: MTS-IPTV
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

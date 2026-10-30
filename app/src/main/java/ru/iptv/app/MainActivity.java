@@ -70,7 +70,7 @@ public final class MainActivity extends Activity {
     private FrameLayout phoneRoot,videoHost,phoneControlsHost;
     private LinearLayout phonePage;
     private TextView phoneChannelTitle;
-    private Button fullscreenButton;
+    private FullscreenArrowButton fullscreenButton;
     private boolean fullscreenRequested=false, silentRestart=false;
     private final Bitmap[] logoCache=new Bitmap[22];
     private final Runnable hideFullscreen=()->{if(fullscreenButton!=null)fullscreenButton.setVisibility(View.GONE);};
@@ -311,6 +311,60 @@ public final class MainActivity extends Activity {
         root.addView(grid,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(root);
     }
+
+    // Two diagonal fullscreen arrows, like the YouTube fullscreen toggle.
+    // This is a vector icon, avoiding font-dependent fullscreen glyphs.
+    private final class FullscreenArrowButton extends View {
+        private final Paint arrowPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
+        private boolean fullscreen=false;
+
+        FullscreenArrowButton(){
+            super(MainActivity.this);
+            setContentDescription("На весь экран");
+            setBackground(bg(0xdd102438,9));
+            setClickable(true);
+        }
+
+        void setFullscreen(boolean enabled){
+            fullscreen=enabled;
+            setContentDescription(enabled?"Вернуться в вертикальный режим":"На весь экран");
+            invalidate();
+        }
+
+        @Override protected void onDraw(Canvas canvas){
+            super.onDraw(canvas);
+            arrowPaint.setColor(Color.WHITE);
+            arrowPaint.setStyle(Paint.Style.STROKE);
+            arrowPaint.setStrokeCap(Paint.Cap.ROUND);
+            arrowPaint.setStrokeJoin(Paint.Join.ROUND);
+            arrowPaint.setStrokeWidth(dp(2.8f));
+            float x=getWidth()/2f,y=getHeight()/2f;
+            float outer=dp(11), near=dp(3), head=dp(6);
+            if(fullscreen){
+                // Exit fullscreen: two arrows point towards the centre.
+                canvas.drawLine(x-outer,y-outer,x-near,y-near,arrowPaint);
+                canvas.drawLine(x-near,y-near,x-near-head,y-near,arrowPaint);
+                canvas.drawLine(x-near,y-near,x-near,y-near-head,arrowPaint);
+                canvas.drawLine(x+outer,y+outer,x+near,y+near,arrowPaint);
+                canvas.drawLine(x+near,y+near,x+near+head,y+near,arrowPaint);
+                canvas.drawLine(x+near,y+near,x+near,y+near+head,arrowPaint);
+            }else{
+                // Enter fullscreen: arrows point to the opposite corners.
+                canvas.drawLine(x-near,y-near,x-outer,y-outer,arrowPaint);
+                canvas.drawLine(x-outer,y-outer,x-outer+head,y-outer,arrowPaint);
+                canvas.drawLine(x-outer,y-outer,x-outer,y-outer+head,arrowPaint);
+                canvas.drawLine(x+near,y+near,x+outer,y+outer,arrowPaint);
+                canvas.drawLine(x+outer,y+outer,x+outer-head,y+outer,arrowPaint);
+                canvas.drawLine(x+outer,y+outer,x+outer,y+outer-head,arrowPaint);
+            }
+        }
+
+        @Override public boolean performClick(){
+            super.performClick();
+            return true;
+        }
+    }
+
     private void revealFullscreen(){
         if(fullscreenButton==null || tv)return;
         fullscreenButton.setVisibility(View.VISIBLE);
@@ -371,9 +425,7 @@ public final class MainActivity extends Activity {
             phoneControlsHost=new FrameLayout(this);
             phoneControlsHost.addView(controls);
             phonePage.addView(phoneControlsHost,new LinearLayout.LayoutParams(-1,dp(58)));
-            fullscreenButton=button("⛶");
-            fullscreenButton.setTextSize(28);fullscreenButton.setContentDescription("На весь экран");
-            fullscreenButton.setBackground(bg(0xdd102438,9));
+            fullscreenButton=new FullscreenArrowButton();
             fullscreenButton.setOnClickListener(v->toggleFullscreen());
             // Same control in both orientations: always bottom-right over video.
             FrameLayout.LayoutParams fp=new FrameLayout.LayoutParams(dp(45),dp(45),Gravity.BOTTOM|Gravity.RIGHT);
@@ -433,14 +485,14 @@ public final class MainActivity extends Activity {
                 |View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
             phonePage.setVisibility(View.GONE);
             frame.setLayoutParams(new FrameLayout.LayoutParams(-1,-1,Gravity.TOP|Gravity.LEFT));
-            if(fullscreenButton!=null)fullscreenButton.setText("⊟");
+            if(fullscreenButton!=null)fullscreenButton.setFullscreen(true);
             visible=false;
         }else{
             fullscreenRequested=false;
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
             getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
             phonePage.setVisibility(View.VISIBLE);
-            if(fullscreenButton!=null)fullscreenButton.setText("⛶");
+            if(fullscreenButton!=null)fullscreenButton.setFullscreen(false);
             visible=true;
             // Wait for the portrait layout to settle before moving the
             // persistent layer back over the video placeholder.

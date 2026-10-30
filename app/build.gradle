@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'ru.iptv.app'
     compileSdk 35
-    defaultConfig { applicationId 'ru.iptv.app'; minSdk 23; targetSdk 34; versionCode 8; ndk { abiFilters 'armeabi-v7a', 'arm64-v8a' } }
+    defaultConfig { applicationId 'ru.iptv.app'; minSdk 23; targetSdk 34; versionCode 9; ndk { abiFilters 'armeabi-v7a', 'arm64-v8a' } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 dependencies { implementation 'org.videolan.android:libvlc-all:3.6.5' }

@@ -1,6 +1,7 @@
 package ru.iptv.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.UiModeManager;
 import android.content.Context;
@@ -13,6 +14,7 @@ import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -30,6 +32,7 @@ import org.json.JSONObject;
 import org.videolan.libvlc.LibVLC;
 import org.videolan.libvlc.Media;
 import org.videolan.libvlc.MediaPlayer;
+import org.videolan.libvlc.interfaces.IMedia;
 import org.videolan.libvlc.util.VLCVideoLayout;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -38,6 +41,10 @@ import java.util.ArrayList;
 
 public final class MainActivity extends Activity {
     private static final int BG=0xff090f19, PANEL=0xff111c2b, BLUE=0xff187ce5, WHITE=Color.WHITE, SUB=0xffa2b3c8;
+    private static final int[] CACHE_OPTIONS={500,2000,4000};
+    private static final String[] CACHE_LABELS={"Быстрый — 0,5 с","Сбалансированный — 2 с","Устойчивый — 4 с"};
+    private static final int MAX_RECOVERIES=3;
+    private static final long STARTUP_TIMEOUT_MS=25000, STALL_TIMEOUT_MS=12000, CHECK_INTERVAL_MS=2000;
     private final ArrayList<String> names=new ArrayList<>();
     private final ArrayList<String> urls=new ArrayList<>();
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -49,6 +56,45 @@ public final class MainActivity extends Activity {
     private LinearLayout controls;
     private LibVLC vlc;
     private MediaPlayer player;
+    private Media activeMedia;
+    private long playStartedAt, lastFrameAt, lastRecoveryAt, lastTimeValue=-1;
+    private long lastDisplayedPictures=-1;
+    private boolean videoStarted=false, statsAvailable=false;
+    private int recoveryAttempts=0;
+    private final Runnable watchdog=new Runnable(){
+        @Override public void run(){
+            if(!viewing || player==null || activeMedia==null)return;
+            long now=SystemClock.elapsedRealtime();
+            try{
+                IMedia.Stats stats=activeMedia.getStats();
+                if(stats!=null){
+                    statsAvailable=true;
+                    long pictures=stats.displayedPictures;
+                    if(pictures>0 && pictures>lastDisplayedPictures){
+                        lastDisplayedPictures=pictures;
+                        videoStarted=true;
+                        lastFrameAt=now;
+                    }
+                }
+            }catch(Exception ignored){}
+            if(videoStarted && recoveryAttempts>0 && now-lastRecoveryAt>60000)
+                recoveryAttempts=0;
+            long timeout=videoStarted?STALL_TIMEOUT_MS:STARTUP_TIMEOUT_MS;
+            long elapsed=now-(videoStarted?lastFrameAt:playStartedAt);
+            if(elapsed>=timeout && recoveryAttempts<MAX_RECOVERIES){
+                recoveryAttempts++;
+                lastRecoveryAt=now;
+                showStatus("Восстановление потока ("+recoveryAttempts+"/"+MAX_RECOVERIES+")");
+                startPlayer();
+                return;
+            }
+            if(elapsed>=timeout && recoveryAttempts==MAX_RECOVERIES){
+                showStatus("Нет видеосигнала. Выберите канал ещё раз.");
+                recoveryAttempts++;
+            }
+            handler.postDelayed(this,CHECK_INTERVAL_MS);
+        }
+    };
     private WifiManager.MulticastLock lock;
     private Dialog menu;
     private final Runnable hideStatus=()->{if(status!=null && tv)status.setVisibility(View.GONE);};
@@ -106,7 +152,14 @@ public final class MainActivity extends Activity {
         viewing=false;releasePlayer();
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(BG);
         TextView title=text("МТС IPTV",27,true);title.setPadding(dp(18),dp(22),dp(12),dp(8));
-        page.addView(title);
+        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
+        header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        Button settings=button("⚙");settings.setTextSize(23);
+        settings.setContentDescription("Настройки буферизации");
+        settings.setOnClickListener(v->showBufferSettings());
+        LinearLayout.LayoutParams gear=new LinearLayout.LayoutParams(dp(55),dp(52));
+        gear.setMargins(0,dp(12),dp(14),dp(4));header.addView(settings,gear);
+        page.addView(header);
         ListView list=new ListView(this);list.setDividerHeight(dp(4));list.setBackgroundColor(BG);
         list.setPadding(dp(8),dp(4),dp(8),dp(8));list.setClipToPadding(false);
         list.setAdapter(adapter());
@@ -179,35 +232,86 @@ public final class MainActivity extends Activity {
             }
         }catch(Exception ignored){}
     }
+    private int cacheMs(){
+        int saved=getPreferences(0).getInt("buffer_ms",2000);
+        for(int value:CACHE_OPTIONS)if(value==saved)return saved;
+        return 2000;
+    }
+    private String cacheName(){
+        for(int i=0;i<CACHE_OPTIONS.length;i++)if(CACHE_OPTIONS[i]==cacheMs())return CACHE_LABELS[i];
+        return CACHE_LABELS[1];
+    }
+    private void showBufferSettings(){
+        int checked=1;
+        for(int i=0;i<CACHE_OPTIONS.length;i++)if(cacheMs()==CACHE_OPTIONS[i])checked=i;
+        new AlertDialog.Builder(this)
+            .setTitle("Буферизация видео")
+            .setSingleChoiceItems(CACHE_LABELS,checked,(dialog,which)->{
+                getPreferences(0).edit().putInt("buffer_ms",CACHE_OPTIONS[which]).apply();
+                dialog.dismiss();
+                if(viewing)showStatus("Буфер: "+CACHE_LABELS[which]+" (со следующего канала)");
+            })
+            .setNegativeButton("Отмена",null)
+            .show();
+    }
+    private void onPlayerEvent(MediaPlayer p,MediaPlayer.Event event){
+        if(p!=player || !viewing)return;
+        if(event.type==MediaPlayer.Event.Playing)
+            showStatus(channelLabel(current));
+        else if(event.type==MediaPlayer.Event.EncounteredError)
+            showStatus("Нет сигнала: "+channelLabel(current));
+        else if(event.type==MediaPlayer.Event.TimeChanged && !statsAvailable){
+            long timestamp=event.getTimeChanged();
+            if(timestamp>0 && timestamp!=lastTimeValue){
+                lastTimeValue=timestamp;
+                videoStarted=true;
+                lastFrameAt=SystemClock.elapsedRealtime();
+            }
+        }
+    }
     private void startPlayer(){
         if(!viewing || surface==null || urls.isEmpty())return;
-        releasePlayer();acquireWifi();
+        handler.removeCallbacks(watchdog);
+        acquireWifi();
         try{
-            vlc=new LibVLC(this,new ArrayList<String>());
-            player=new MediaPlayer(vlc);
-            MediaPlayer p=player;
-            player.attachViews(surface,null,false,false);
-            player.setEventListener(event->{
-                if(p!=player)return;
-                if(event.type==MediaPlayer.Event.Playing)
-                    runOnUiThread(()->{if(p==player)showStatus(channelLabel(current));});
-                if(event.type==MediaPlayer.Event.EncounteredError)
-                    runOnUiThread(()->{if(p==player)showStatus("Нет сигнала: "+channelLabel(current));});
-            });
-            Media m=new Media(vlc,Uri.parse(urls.get(current)));
-            m.addOption(":network-caching=1000");
-            m.addOption(":live-caching=1000");
-            m.addOption(":no-video-title-show");
-            player.setMedia(m);m.release();
+            if(vlc==null)vlc=new LibVLC(this,new ArrayList<String>());
+            if(player==null){
+                player=new MediaPlayer(vlc);
+                MediaPlayer p=player;
+                player.attachViews(surface,null,false,false);
+                player.setEventListener(event->runOnUiThread(()->onPlayerEvent(p,event)));
+            }else{
+                // Keep LibVLC engine, MediaPlayer and attached video surface.
+                player.stop();
+            }
+            if(activeMedia!=null){activeMedia.release();activeMedia=null;}
+            activeMedia=new Media(vlc,Uri.parse(urls.get(current)));
+            int cache=cacheMs();
+            activeMedia.addOption(":network-caching="+cache);
+            activeMedia.addOption(":live-caching="+cache);
+            activeMedia.addOption(":no-video-title-show");
+            player.setMedia(activeMedia);
+            playStartedAt=SystemClock.elapsedRealtime();
+            lastFrameAt=playStartedAt;
+            lastDisplayedPictures=-1;
+            lastTimeValue=-1;
+            videoStarted=false;
+            statsAvailable=false;
             showStatus("Подключение: "+channelLabel(current));
             player.play();
-        }catch(Exception e){showStatus("Ошибка воспроизведения: "+e.getMessage());}
+            handler.postDelayed(watchdog,CHECK_INTERVAL_MS);
+        }catch(Exception e){
+            showStatus("Ошибка воспроизведения: "+e.getMessage());
+            handler.postDelayed(watchdog,CHECK_INTERVAL_MS);
+        }
     }
     private void releasePlayer(){
+        handler.removeCallbacks(watchdog);
         if(player!=null){
-            try{player.stop();player.detachViews();player.release();}catch(Exception ignored){}
+            try{player.setEventListener(null);player.stop();player.detachViews();player.release();}catch(Exception ignored){}
             player=null;
         }
+        if(activeMedia!=null){try{activeMedia.release();}catch(Exception ignored){}activeMedia=null;}
         if(vlc!=null){try{vlc.release();}catch(Exception ignored){} vlc=null;}
     }
     private void showStatus(String s){
@@ -222,6 +326,7 @@ public final class MainActivity extends Activity {
         if(names.isEmpty())return;
         current=(i+names.size())%names.size();
         getPreferences(0).edit().putInt("last",current).apply();
+        recoveryAttempts=0;
         startPlayer();
     }
     private void showMenu(){
@@ -229,6 +334,9 @@ public final class MainActivity extends Activity {
         menu=new Dialog(this);menu.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setBackgroundColor(BG);
         box.addView(text("МТС IPTV  ·  22 канала",22,true));
+        Button settings=button("⚙ Буферизация: "+cacheName());
+        settings.setOnClickListener(v->{menu.dismiss();showBufferSettings();});
+        box.addView(settings,new LinearLayout.LayoutParams(-1,dp(58)));
         ListView list=new ListView(this);list.setDividerHeight(dp(4));list.setPadding(dp(8),0,dp(8),dp(8));
         list.setAdapter(adapter());
         list.setOnItemClickListener((parent,v,position,id)->{menu.dismiss();switchTo(position);});

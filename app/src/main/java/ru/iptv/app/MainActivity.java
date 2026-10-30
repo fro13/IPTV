@@ -40,7 +40,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 
 public final class MainActivity extends Activity {
-    private static final int BG=0xff090f19, PANEL=0xff111c2b, BLUE=0xff187ce5, WHITE=Color.WHITE, SUB=0xffa2b3c8;
+    private static final int BG=0xff070f1b, PANEL=0xff0e1d2e, BLUE=0xff168cff, WHITE=Color.WHITE, SUB=0xff9eb4d1;
+    private static final int BORDER=0xff243b53, SELECTED=0xff102f50, DIALOG_BG=0xff0a192a;
     private static final int[] CACHE_OPTIONS={500,2000,4000};
     private static final String[] CACHE_LABELS={"Быстрый — 0,5 с","Сбалансированный — 2 с","Устойчивый — 4 с"};
     private static final int MAX_RECOVERIES=3;
@@ -54,6 +55,10 @@ public final class MainActivity extends Activity {
     private VLCVideoLayout surface;
     private TextView status;
     private LinearLayout controls;
+    private FrameLayout phoneRoot,videoHost,phoneControlsHost;
+    private LinearLayout phonePage;
+    private TextView phoneChannelTitle;
+    private ListView phoneList;
     private LibVLC vlc;
     private MediaPlayer player;
     private Media activeMedia;
@@ -129,50 +134,138 @@ public final class MainActivity extends Activity {
         if(tv)showPlayer();else showBrowser();
     }
     private int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+0.5f);}
+
     private GradientDrawable bg(int color,int radius){
         GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(radius));return g;
     }
-    private TextView text(String s,int size,boolean bold){
-        TextView t=new TextView(this);t.setText(s);t.setTextColor(WHITE);t.setTextSize(size);
+    private GradientDrawable outlined(int color,int radius,int stroke){
+        GradientDrawable g=bg(color,radius);g.setStroke(dp(1),stroke);return g;
+    }
+    private GradientDrawable blueGradient(int radius){
+        GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0xff279cff,0xff075dd2});
+        g.setCornerRadius(dp(radius));return g;
+    }
+    private TextView label(String s,int size,int color,boolean bold){
+        TextView t=new TextView(this);t.setText(s);t.setTextColor(color);t.setTextSize(size);
         if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        t.setGravity(Gravity.CENTER_VERTICAL);t.setPadding(dp(16),dp(11),dp(16),dp(11));return t;
+        t.setGravity(Gravity.CENTER_VERTICAL);return t;
+    }
+    private TextView text(String s,int size,boolean bold){
+        TextView t=label(s,size,WHITE,bold);
+        t.setPadding(dp(16),dp(11),dp(16),dp(11));return t;
     }
     private Button button(String s){
         Button b=new Button(this);b.setText(s);b.setAllCaps(false);
-        b.setTextColor(WHITE);b.setBackground(bg(PANEL,12));return b;
+        b.setTextColor(WHITE);b.setTextSize(13);
+        b.setPadding(dp(4),0,dp(4),0);
+        b.setMinHeight(0);b.setMinimumHeight(0);
+        b.setBackground(outlined(PANEL,12,BORDER));return b;
     }
     private String channelLabel(int i){return (i+1)+".  "+names.get(i);}
+    private String monogram(String name){
+        if(name.contains("Первый"))return "1";
+        if(name.contains("Россия 1"))return "Р1";
+        if(name.contains("Матч"))return "М";
+        if(name.contains("НТВ"))return "НТВ";
+        if(name.contains("СТС"))return "СТС";
+        String clean=name.trim();
+        return clean.substring(0,Math.min(clean.length(),2)).toUpperCase();
+    }
     private ArrayAdapter<String> adapter(){
         ArrayList<String> labels=new ArrayList<>();
-        for(int i=0;i<names.size();i++)labels.add(channelLabel(i));
+        for(int i=0;i<names.size();i++)labels.add(names.get(i));
         return new ArrayAdapter<String>(this,android.R.layout.simple_list_item_1,labels){
             @Override public View getView(int pos,View convert,ViewGroup parent){
-                TextView t=text(getItem(pos),tv?19:17,pos==current);
-                t.setSingleLine(false);
-                t.setMinHeight(dp(tv?54:58));
-                t.setBackground(bg(pos==current?BLUE:PANEL,10));
-                return t;
+                LinearLayout row=new LinearLayout(MainActivity.this);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(10),dp(3),dp(6),dp(3));
+                boolean selected=pos==current;
+                row.setBackground(outlined(selected?SELECTED:PANEL,12,selected?BLUE:BORDER));
+                row.setMinimumHeight(dp(tv?54:58));
+                TextView number=label((pos+1)+".",tv?17:14,SUB,false);
+                number.setGravity(Gravity.CENTER);
+                row.addView(number,new LinearLayout.LayoutParams(dp(30),dp(46)));
+                if(!tv){
+                    TextView logo=label(monogram(names.get(pos)),12,WHITE,true);
+                    logo.setGravity(Gravity.CENTER);
+                    logo.setBackground(bg(pos%3==0?0xff124f9e:(pos%3==1?0xff18426c:0xff215072),9));
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(43),dp(38));
+                    lp.setMargins(dp(3),0,dp(11),0);row.addView(logo,lp);
+                }
+                TextView name=label(names.get(pos),tv?19:16,selected?WHITE:0xffd4e0ed,selected);
+                name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                row.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+                if(!tv){
+                    boolean favorite=getPreferences(0).getBoolean("favorite_"+pos,false);
+                    TextView star=label(favorite?"★":"☆",27,favorite?BLUE:0xff718eae,false);
+                    star.setGravity(Gravity.CENTER);
+                    star.setContentDescription(favorite?"Убрать из избранного":"Добавить в избранное");
+                    star.setOnClickListener(v->{
+                        getPreferences(0).edit().putBoolean("favorite_"+pos,!favorite).apply();
+                        if(parent instanceof ListView)((ListView)parent).invalidateViews();
+                    });
+                    star.setFocusable(false);
+                    row.addView(star,new LinearLayout.LayoutParams(dp(44),dp(46)));
+                }
+                return row;
             }
         };
     }
+    private LinearLayout navigationBar(boolean browser,ListView browserList){
+        LinearLayout bar=new LinearLayout(this);
+        bar.setPadding(dp(7),dp(8),dp(7),dp(8));
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setBackground(bg(0xff091726,14));
+        Button prev=button("◀  Предыдущий");
+        Button list=button("☷  Список");
+        Button next=button("Следующий  ▶");
+        list.setBackground(outlined(0xff103e70,12,BLUE));
+        list.setTextColor(WHITE);
+        prev.setOnClickListener(v->{if(browser){current=(current+names.size()-1)%names.size();showPlayer();}else switchTo(current-1);});
+        next.setOnClickListener(v->{if(browser){current=(current+1)%names.size();showPlayer();}else switchTo(current+1);});
+        list.setOnClickListener(v->{
+            if(browser){if(browserList!=null)browserList.smoothScrollToPosition(current);}
+            else showBrowser();
+        });
+        Button[] items={prev,list,next};
+        float[] weights={1.15f,1.12f,1.15f};
+        for(int i=0;i<items.length;i++){
+            items[i].setTextSize(11);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(54),weights[i]);
+            lp.setMargins(dp(3),0,dp(3),0);
+            bar.addView(items[i],lp);
+        }
+        return bar;
+    }
+
     private void showBrowser(){
         viewing=false;releasePlayer();
+        status=null;controls=null;phoneRoot=null;phoneList=null;phoneChannelTitle=null;
+        if(!tv){
+            getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+        }
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(BG);
-        TextView title=text("МТС IPTV",27,true);title.setPadding(dp(18),dp(22),dp(12),dp(8));
+        TextView title=text("МТС IPTV",27,true);title.setPadding(dp(18),dp(17),dp(12),dp(13));
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
         Button settings=button("⚙");settings.setTextSize(23);
         settings.setContentDescription("Настройки буферизации");
         settings.setOnClickListener(v->showBufferSettings());
-        LinearLayout.LayoutParams gear=new LinearLayout.LayoutParams(dp(55),dp(52));
-        gear.setMargins(0,dp(12),dp(14),dp(4));header.addView(settings,gear);
+        LinearLayout.LayoutParams gear=new LinearLayout.LayoutParams(dp(52),dp(50));
+        gear.setMargins(0,dp(10),dp(13),dp(8));header.addView(settings,gear);
         page.addView(header);
-        ListView list=new ListView(this);list.setDividerHeight(dp(4));list.setBackgroundColor(BG);
-        list.setPadding(dp(8),dp(4),dp(8),dp(8));list.setClipToPadding(false);
+        ListView list=new ListView(this);list.setDividerHeight(dp(4));list.setDivider(null);
+        list.setBackgroundColor(BG);list.setVerticalScrollBarEnabled(false);
+        list.setPadding(dp(12),dp(3),dp(12),dp(6));list.setClipToPadding(false);
         list.setAdapter(adapter());
-        list.setOnItemClickListener((parent,view,pos,id)->{current=pos;showPlayer();});
+        list.setOnItemClickListener((parent,view,pos,id)->{current=pos;recoveryAttempts=0;showPlayer();});
         page.addView(list,new LinearLayout.LayoutParams(-1,0,1));
+        page.addView(navigationBar(true,list),new LinearLayout.LayoutParams(-1,-2));
         setContentView(page);
+        list.setSelection(current);
     }
     private void showPlayer(){
         viewing=true;visible=true;
@@ -180,26 +273,64 @@ public final class MainActivity extends Activity {
         frame=new FrameLayout(this);frame.setBackgroundColor(Color.BLACK);
         surface=new VLCVideoLayout(this);
         frame.addView(surface,new FrameLayout.LayoutParams(-1,-1));
-        status=text("",tv?20:18,true);
+        status=text("",tv?20:14,true);
         status.setBackground(bg(0xe8111c2b,12));
         FrameLayout.LayoutParams sp=new FrameLayout.LayoutParams(tv?dp(540):-1,-2,Gravity.BOTTOM);
-        sp.setMargins(dp(16),dp(16),dp(16),tv?dp(22):dp(90));
+        sp.setMargins(dp(12),dp(12),dp(12),dp(9));
         frame.addView(status,sp);
         if(!tv){
-            controls=new LinearLayout(this);controls.setOrientation(LinearLayout.HORIZONTAL);
-            controls.setPadding(dp(8),dp(8),dp(8),dp(8));controls.setBackgroundColor(0xe8111c2b);
-            Button back=button("Список");Button prev=button("◀");Button next=button("▶");
-            back.setOnClickListener(v->showBrowser());prev.setOnClickListener(v->switchTo(current-1));
-            next.setOnClickListener(v->switchTo(current+1));
-            controls.addView(back,new LinearLayout.LayoutParams(0,dp(60),2));
-            controls.addView(prev,new LinearLayout.LayoutParams(0,dp(60),1));
-            controls.addView(next,new LinearLayout.LayoutParams(0,dp(60),1));
-            frame.addView(controls,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
-            frame.setOnClickListener(v->{visible=!visible;controls.setVisibility(visible?View.VISIBLE:View.GONE);status.setVisibility(visible?View.VISIBLE:View.GONE);});
-        }
-        setContentView(frame);
+            getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+            phoneRoot=new FrameLayout(this);phoneRoot.setBackgroundColor(BG);
+            phonePage=new LinearLayout(this);
+            phonePage.setOrientation(LinearLayout.VERTICAL);phonePage.setBackgroundColor(BG);
+            LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
+            Button back=button("‹");back.setTextSize(31);
+            back.setOnClickListener(v->showBrowser());
+            LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(dp(46),dp(48));
+            bp.setMargins(dp(10),dp(6),dp(6),dp(6));header.addView(back,bp);
+            TextView title=label("МТС IPTV",23,WHITE,true);
+            header.addView(title,new LinearLayout.LayoutParams(0,dp(56),1));
+            Button settings=button("⚙");settings.setTextSize(23);
+            settings.setOnClickListener(v->showBufferSettings());
+            LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(dp(47),dp(46));
+            gp.setMargins(dp(4),dp(6),dp(12),dp(6));header.addView(settings,gp);
+            phonePage.addView(header);
+            videoHost=new FrameLayout(this);videoHost.setBackgroundColor(Color.BLACK);
+            int videoHeight=(int)(getResources().getDisplayMetrics().widthPixels*9f/16f);
+            LinearLayout.LayoutParams vlp=new LinearLayout.LayoutParams(-1,videoHeight);
+            vlp.setMargins(dp(10),dp(4),dp(10),0);phonePage.addView(videoHost,vlp);
+            phoneChannelTitle=label(names.get(current),19,WHITE,true);
+            phoneChannelTitle.setPadding(dp(16),dp(10),dp(16),dp(7));
+            phonePage.addView(phoneChannelTitle,new LinearLayout.LayoutParams(-1,dp(51)));
+            LinearLayout listHeading=new LinearLayout(this);
+            listHeading.setGravity(Gravity.CENTER_VERTICAL);
+            listHeading.setPadding(dp(17),dp(4),dp(12),dp(2));
+            listHeading.addView(label("Каналы",20,WHITE,true));
+            phonePage.addView(listHeading,new LinearLayout.LayoutParams(-1,dp(39)));
+            phoneList=new ListView(this);
+            phoneList.setDivider(null);phoneList.setDividerHeight(dp(4));
+            phoneList.setVerticalScrollBarEnabled(false);
+            phoneList.setPadding(dp(10),dp(2),dp(10),dp(5));phoneList.setClipToPadding(false);
+            phoneList.setBackgroundColor(BG);
+            phoneList.setAdapter(adapter());
+            phoneList.setOnItemClickListener((p,v,pos,id)->switchTo(pos));
+            phonePage.addView(phoneList,new LinearLayout.LayoutParams(-1,0,1));
+            phoneControlsHost=new FrameLayout(this);
+            controls=navigationBar(false,null);
+            phoneControlsHost.addView(controls,new FrameLayout.LayoutParams(-1,-2));
+            phonePage.addView(phoneControlsHost,new LinearLayout.LayoutParams(-1,-2));
+            setContentView(phoneRoot);
+            frame.setOnClickListener(v->{
+                if(getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE){
+                    visible=!visible;
+                    controls.setVisibility(visible?View.VISIBLE:View.GONE);
+                    status.setVisibility(visible?View.VISIBLE:View.GONE);
+                }
+            });
+        }else setContentView(frame);
         applyPhoneOrientation(getResources().getConfiguration());
         getPreferences(0).edit().putInt("last",current).apply();
+        if(phoneList!=null)phoneList.setSelection(current);
         startPlayer();
     }
     // Keep the current LibVLC session and SurfaceView attached when the phone rotates.
@@ -209,9 +340,17 @@ public final class MainActivity extends Activity {
         applyPhoneOrientation(config);
     }
 
+
+    private void removeParent(View view){
+        if(view!=null && view.getParent() instanceof ViewGroup)
+            ((ViewGroup)view.getParent()).removeView(view);
+    }
     private void applyPhoneOrientation(Configuration config) {
-        if (tv || !viewing) return;
+        if (tv || !viewing || phoneRoot==null || frame==null) return;
         boolean landscape=config.orientation==Configuration.ORIENTATION_LANDSCAPE;
+        removeParent(frame);
+        removeParent(controls);
+        phoneRoot.removeAllViews();
         if (landscape) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
             getWindow().getDecorView().setSystemUiVisibility(
@@ -221,14 +360,24 @@ public final class MainActivity extends Activity {
                     | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                     | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+            phoneRoot.addView(frame,new FrameLayout.LayoutParams(-1,-1));
+            FrameLayout.LayoutParams clp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);
+            frame.addView(controls,clp);
+            FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)status.getLayoutParams();
+            sp.setMargins(dp(12),dp(12),dp(12),dp(82));status.setLayoutParams(sp);
             visible=false;
         } else {
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
             getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+            videoHost.addView(frame,new FrameLayout.LayoutParams(-1,-1));
+            phoneControlsHost.addView(controls,new FrameLayout.LayoutParams(-1,-2));
+            phoneRoot.addView(phonePage,new FrameLayout.LayoutParams(-1,-1));
+            FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)status.getLayoutParams();
+            sp.setMargins(dp(9),dp(9),dp(9),dp(8));status.setLayoutParams(sp);
             visible=true;
         }
-        if (controls!=null) controls.setVisibility(visible?View.VISIBLE:View.GONE);
-        if (status!=null) status.setVisibility(visible?View.VISIBLE:View.GONE);
+        controls.setVisibility(visible?View.VISIBLE:View.GONE);
+        status.setVisibility(visible?View.VISIBLE:View.GONE);
     }
 
     private void acquireWifi(){
@@ -248,18 +397,101 @@ public final class MainActivity extends Activity {
         for(int i=0;i<CACHE_OPTIONS.length;i++)if(CACHE_OPTIONS[i]==cacheMs())return CACHE_LABELS[i];
         return CACHE_LABELS[1];
     }
+
+    private LinearLayout bufferChoice(String symbol,String name,String description,String time,
+                                     boolean selected,Dialog dialog,int option,int[] pending,
+                                     ArrayList<LinearLayout> choices){
+        LinearLayout card=new LinearLayout(this);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(11),dp(10),dp(10),dp(10));
+        card.setBackground(outlined(selected?SELECTED:PANEL,12,selected?BLUE:BORDER));
+        TextView icon=label(symbol,23,BLUE,true);
+        icon.setGravity(Gravity.CENTER);
+        card.addView(icon,new LinearLayout.LayoutParams(dp(41),dp(50)));
+        LinearLayout words=new LinearLayout(this);words.setOrientation(LinearLayout.VERTICAL);
+        TextView heading=label(name,15,WHITE,true);
+        TextView sub=label(description,12,SUB,false);
+        words.addView(heading);words.addView(sub);
+        LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(0,-2,1);
+        wp.setMargins(dp(3),0,dp(5),0);card.addView(words,wp);
+        TextView amount=label(time,14,selected?BLUE:WHITE,false);
+        amount.setGravity(Gravity.CENTER);card.addView(amount,new LinearLayout.LayoutParams(dp(42),dp(50)));
+        TextView radio=label(selected?"◉":"○",27,selected?BLUE:0xff557496,false);
+        radio.setGravity(Gravity.CENTER);card.addView(radio,new LinearLayout.LayoutParams(dp(32),dp(50)));
+        card.setOnClickListener(v->{
+            pending[0]=option;
+            for(int i=0;i<choices.size();i++){
+                boolean isSelected=i==option;
+                LinearLayout c=choices.get(i);
+                c.setBackground(outlined(isSelected?SELECTED:PANEL,12,isSelected?BLUE:BORDER));
+                TextView val=(TextView)c.getChildAt(2);
+                TextView mark=(TextView)c.getChildAt(3);
+                val.setTextColor(isSelected?BLUE:WHITE);
+                mark.setText(isSelected?"◉":"○");
+                mark.setTextColor(isSelected?BLUE:0xff557496);
+            }
+        });
+        return card;
+    }
     private void showBufferSettings(){
-        int checked=1;
-        for(int i=0;i<CACHE_OPTIONS.length;i++)if(cacheMs()==CACHE_OPTIONS[i])checked=i;
-        new AlertDialog.Builder(this)
-            .setTitle("Буферизация видео")
-            .setSingleChoiceItems(CACHE_LABELS,checked,(dialog,which)->{
-                getPreferences(0).edit().putInt("buffer_ms",CACHE_OPTIONS[which]).apply();
-                dialog.dismiss();
-                if(viewing)showStatus("Буфер: "+CACHE_LABELS[which]+" (со следующего канала)");
-            })
-            .setNegativeButton("Отмена",null)
-            .show();
+        int chosen=1;
+        for(int i=0;i<CACHE_OPTIONS.length;i++)if(cacheMs()==CACHE_OPTIONS[i])chosen=i;
+        final int[] pending={chosen};
+        Dialog dialog=new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(15),dp(17),dp(15),dp(15));
+        content.setBackground(outlined(DIALOG_BG,18,BORDER));
+        LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
+        TextView emblem=label("≋",27,BLUE,true);emblem.setGravity(Gravity.CENTER);
+        emblem.setBackground(bg(0xff123352,50));
+        LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(dp(49),dp(49));
+        ep.setMargins(0,0,dp(12),0);top.addView(emblem,ep);
+        LinearLayout titles=new LinearLayout(this);titles.setOrientation(LinearLayout.VERTICAL);
+        titles.addView(label("Буферизация видео",20,WHITE,true));
+        TextView subtitle=label("Скорость запуска и устойчивость канала",12,SUB,false);
+        subtitle.setPadding(0,dp(5),0,0);
+        titles.addView(subtitle);
+        top.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
+        content.addView(top);
+        String[] symbols={"➤","⚖","◇"};
+        String[] names={"Быстрый","Сбалансированный","Устойчивый"};
+        String[] details={"Быстрое переключение","Оптимальный режим","Меньше зависаний"};
+        String[] times={"0,5 с","2 с","4 с"};
+        ArrayList<LinearLayout> choices=new ArrayList<>();
+        for(int i=0;i<3;i++){
+            LinearLayout choice=bufferChoice(symbols[i],names[i],details[i],times[i],i==chosen,
+                                              dialog,i,pending,choices);
+            choices.add(choice);
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,dp(75));
+            cp.setMargins(0,dp(i==0?19:8),0,0);
+            content.addView(choice,cp);
+        }
+        LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);
+        Button cancel=button("Отмена");cancel.setOnClickListener(v->dialog.dismiss());
+        Button apply=button("Применить");
+        apply.setBackground(blueGradient(12));apply.setTextSize(15);
+        apply.setOnClickListener(v->{
+            getPreferences(0).edit().putInt("buffer_ms",CACHE_OPTIONS[pending[0]]).apply();
+            dialog.dismiss();
+            if(viewing)showStatus("Буфер: "+CACHE_LABELS[pending[0]]+" (со следующего канала)");
+        });
+        LinearLayout.LayoutParams c=new LinearLayout.LayoutParams(0,dp(51),1);
+        c.setMargins(0,0,dp(5),0);actions.addView(cancel,c);
+        LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,dp(51),1);
+        ap.setMargins(dp(5),0,0,0);actions.addView(apply,ap);
+        LinearLayout.LayoutParams al=new LinearLayout.LayoutParams(-1,-2);
+        al.setMargins(0,dp(19),0,0);content.addView(actions,al);
+        dialog.setContentView(content);dialog.show();
+        Window w=dialog.getWindow();
+        if(w!=null){
+            w.setBackgroundDrawableResource(android.R.color.transparent);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams params=w.getAttributes();params.dimAmount=0.70f;
+            w.setAttributes(params);
+            int width=tv?dp(520):(int)(getResources().getDisplayMetrics().widthPixels*0.94f);
+            w.setLayout(width,WindowManager.LayoutParams.WRAP_CONTENT);
+        }
     }
     private void onPlayerEvent(MediaPlayer p,MediaPlayer.Event event){
         if(p!=player || !viewing)return;
@@ -333,20 +565,25 @@ public final class MainActivity extends Activity {
         status.setText(s);
         handler.removeCallbacks(hideStatus);
         if(tv)handler.postDelayed(hideStatus,3800);
-        else if(viewing && getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE)handler.postDelayed(()->{if(status!=null && !visible)status.setVisibility(View.GONE);},2600);
+        else if(viewing)handler.postDelayed(()->{
+            if(status!=null && (getResources().getConfiguration().orientation==Configuration.ORIENTATION_PORTRAIT || !visible))
+                status.setVisibility(View.GONE);
+        },3600);
     }
     private void switchTo(int i){
         if(names.isEmpty())return;
         current=(i+names.size())%names.size();
         getPreferences(0).edit().putInt("last",current).apply();
         recoveryAttempts=0;
+        if(phoneChannelTitle!=null)phoneChannelTitle.setText(names.get(current));
+        if(phoneList!=null){phoneList.invalidateViews();phoneList.setSelection(current);}
         startPlayer();
     }
     private void showMenu(){
         if(menu!=null&&menu.isShowing())return;
         menu=new Dialog(this);menu.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setBackgroundColor(BG);
-        box.addView(text("МТС IPTV  ·  22 канала",22,true));
+        box.addView(text("МТС IPTV  ·  "+names.size()+" каналов",22,true));
         Button settings=button("⚙ Буферизация: "+cacheName());
         settings.setOnClickListener(v->{menu.dismiss();showBufferSettings();});
         box.addView(settings,new LinearLayout.LayoutParams(-1,dp(58)));

@@ -375,8 +375,9 @@ public final class MainActivity extends Activity {
             fullscreenButton.setTextSize(28);fullscreenButton.setContentDescription("На весь экран");
             fullscreenButton.setBackground(bg(0xdd102438,9));
             fullscreenButton.setOnClickListener(v->toggleFullscreen());
-            FrameLayout.LayoutParams fp=new FrameLayout.LayoutParams(dp(45),dp(45),Gravity.TOP|Gravity.RIGHT);
-            fp.setMargins(0,dp(10),dp(10),0);frame.addView(fullscreenButton,fp);
+            // Same control in both orientations: always bottom-right over video.
+            FrameLayout.LayoutParams fp=new FrameLayout.LayoutParams(dp(45),dp(45),Gravity.BOTTOM|Gravity.RIGHT);
+            fp.setMargins(0,0,dp(10),dp(10));frame.addView(fullscreenButton,fp);
             frame.setOnClickListener(v->revealFullscreen());
             surface.setOnClickListener(v->revealFullscreen());
             // Keep LibVLC's SurfaceView attached to a stable parent. The

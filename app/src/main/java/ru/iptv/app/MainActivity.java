@@ -271,7 +271,7 @@ public final class MainActivity extends Activity {
             playbackError=true;
             showStatus("Нет сигнала: "+channelLabel(current));
         }
-        else if(event.type==MediaPlayer.Event.TimeChanged && !statsAvailable){
+        else if(event.type==MediaPlayer.Event.TimeChanged && (!statsAvailable || lastDisplayedPictures<=0)){
             long timestamp=event.getTimeChanged();
             if(timestamp>0 && timestamp!=lastTimeValue){
                 lastTimeValue=timestamp;

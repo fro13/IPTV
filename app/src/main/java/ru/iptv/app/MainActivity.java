@@ -73,6 +73,9 @@ public final class MainActivity extends Activity {
     private LinearLayout phonePage;
     private TextView phoneChannelTitle;
     private Button fullscreenButton;
+    private Button portraitMuteButton;
+    private SeekBar portraitVolumeSlider;
+    private boolean volumeMuted=false;
     private VerticalVolumeOverlay landscapeVolume;
     private boolean fullscreenRequested=false, silentRestart=false;
     private final Bitmap[] logoCache=new Bitmap[22];
@@ -243,21 +246,29 @@ public final class MainActivity extends Activity {
             }
         };
     }
+    private void refreshPortraitMuteButton(){
+        if(portraitMuteButton==null)return;
+        portraitMuteButton.setText(volumeMuted?"◖×":"◖))");
+        portraitMuteButton.setContentDescription(volumeMuted?"Включить звук":"Выключить звук");
+    }
+
     private LinearLayout navigationBar(){
         LinearLayout bar=new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(7),dp(3),dp(7),dp(5));
         bar.setBackgroundColor(BG);
-        Button previous=button("◀  Предыдущий");
-        Button list=button("☷  Список");
-        Button next=button("Следующий  ▶");
-        previous.setTextSize(11);list.setTextSize(13);next.setTextSize(11);
+        Button previous=button("‹");
+        Button list=button("☷  Список каналов");
+        Button next=button("›");
+        previous.setTextSize(29);list.setTextSize(13);next.setTextSize(29);
+        previous.setContentDescription("Предыдущий канал");
+        next.setContentDescription("Следующий канал");
         list.setBackground(outlined(0xff163b67,11,0xff396f9b));
         previous.setOnClickListener(v->switchTo(current-1));
         next.setOnClickListener(v->switchTo(current+1));
         list.setOnClickListener(v->showBrowser());
         Button[] buttons={previous,list,next};
-        float[] weights={1.1f,1f,1.1f};
+        float[] weights={0.85f,1.8f,0.85f};
         for(int i=0;i<buttons.length;i++){
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(48),weights[i]);
             lp.setMargins(dp(3),0,dp(3),0);
@@ -271,6 +282,7 @@ public final class MainActivity extends Activity {
         releasePlayer();
         frame=null;surface=null;status=null;controls=null;phoneRoot=null;phonePage=null;
         phoneChannelTitle=null;fullscreenButton=null;landscapeVolume=null;
+        portraitMuteButton=null;portraitVolumeSlider=null;
         if(!tv){
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -372,8 +384,11 @@ public final class MainActivity extends Activity {
             if(end<=start)return;
             level=Math.max(0f,Math.min(1f,(end-y)/(end-start)));
             int volume=Math.round(level*100);
+            volumeMuted=false;
             if(player!=null)player.setVolume(volume);
             getPreferences(0).edit().putInt("volume",volume).apply();
+            if(portraitVolumeSlider!=null)portraitVolumeSlider.setProgress(volume);
+            refreshPortraitMuteButton();
             invalidate();
         }
 
@@ -473,23 +488,37 @@ public final class MainActivity extends Activity {
             phonePage.addView(phoneChannelTitle,new LinearLayout.LayoutParams(-1,dp(58)));
             LinearLayout volumeRow=new LinearLayout(this);
             volumeRow.setGravity(Gravity.CENTER_VERTICAL);
-            volumeRow.setPadding(dp(35),0,dp(35),0);
-            TextView volumeIcon=label("◖))",19,SUB,false);
-            volumeRow.addView(volumeIcon);
-            SeekBar volume=new SeekBar(this);
-            volume.setMax(100);volume.setProgress(75);
-            volume.setProgressTintList(android.content.res.ColorStateList.valueOf(0xff5388bf));
-            volume.setThumbTintList(android.content.res.ColorStateList.valueOf(0xffb5cee8));
-            volume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            volumeRow.setPadding(dp(24),0,dp(24),0);
+            portraitMuteButton=button(volumeMuted?"◖×":"◖))");
+            portraitMuteButton.setTextSize(18);
+            portraitMuteButton.setContentDescription(volumeMuted?"Включить звук":"Выключить звук");
+            portraitMuteButton.setOnClickListener(v->{
+                volumeMuted=!volumeMuted;
+                if(player!=null)player.setVolume(volumeMuted?0:getPreferences(0).getInt("volume",75));
+                refreshPortraitMuteButton();
+            });
+            LinearLayout.LayoutParams muteParams=new LinearLayout.LayoutParams(dp(50),dp(46));
+            muteParams.setMargins(0,0,dp(12),0);
+            volumeRow.addView(portraitMuteButton,muteParams);
+            portraitVolumeSlider=new SeekBar(this);
+            portraitVolumeSlider.setMax(100);
+            portraitVolumeSlider.setProgressTintList(android.content.res.ColorStateList.valueOf(0xff5388bf));
+            portraitVolumeSlider.setThumbTintList(android.content.res.ColorStateList.valueOf(0xffb5cee8));
+            portraitVolumeSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
                 public void onProgressChanged(SeekBar bar,int progress,boolean fromUser){
-                    if(fromUser && player!=null)player.setVolume(progress);
-                    if(fromUser)getPreferences(0).edit().putInt("volume",progress).apply();
+                    if(fromUser){
+                        // Moving either volume control unmutes and sets a new level.
+                        volumeMuted=false;
+                        if(player!=null)player.setVolume(progress);
+                        getPreferences(0).edit().putInt("volume",progress).apply();
+                        refreshPortraitMuteButton();
+                    }
                 }
                 public void onStartTrackingTouch(SeekBar bar){}
                 public void onStopTrackingTouch(SeekBar bar){}
             });
-            volume.setProgress(getPreferences(0).getInt("volume",75));
-            volumeRow.addView(volume,new LinearLayout.LayoutParams(0,dp(42),1));
+            portraitVolumeSlider.setProgress(getPreferences(0).getInt("volume",75));
+            volumeRow.addView(portraitVolumeSlider,new LinearLayout.LayoutParams(0,dp(42),1));
             phonePage.addView(volumeRow);
             phonePage.addView(new View(this),new LinearLayout.LayoutParams(1,0,1f));
             controls=navigationBar();
@@ -713,11 +742,8 @@ public final class MainActivity extends Activity {
             boolean changed=chosen!=cacheMs();
             getPreferences(0).edit().putInt("buffer_ms",chosen).apply();
             dialog.dismiss();
-            if(changed && viewing){
-                recoveryAttempts=0;
-                silentRestart=true;
-                startPlayer();
-            }
+            // Apply the new caching value on the next channel start only.
+            // Do not interrupt the channel or show a buffer notice over video.
         });
         LinearLayout.LayoutParams cancelLp=new LinearLayout.LayoutParams(0,dp(47),1);
         cancelLp.setMargins(0,dp(8),dp(5),0);actions.addView(cancel,cancelLp);
@@ -790,7 +816,7 @@ public final class MainActivity extends Activity {
                 silentRestart=false;
             }else showStatus("Подключение: "+channelLabel(current));
             player.play();
-            if(!tv)player.setVolume(getPreferences(0).getInt("volume",75));
+            if(!tv)player.setVolume(volumeMuted?0:getPreferences(0).getInt("volume",75));
             handler.postDelayed(watchdog,CHECK_INTERVAL_MS);
         }catch(Exception e){
             showStatus("Ошибка воспроизведения: "+e.getMessage());

@@ -94,6 +94,35 @@ jobs:
           if missing: print("Logo source unavailable, temporary labeled fallback:",missing)
           
           PY
+      - name: Improve OTR and MUZ TV grid logos
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw, ImageFont
+          W,H=300,180
+          out=Path("app/src/main/assets/channel_logos")
+          font="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+          img=Image.new("RGBA",(W,H),(0,0,0,0))
+          d=ImageDraw.Draw(img)
+          for dx,dy,c in [(-14,0,(34,205,255,220)),(0,-8,(255,52,184,215)),(14,8,(114,70,255,215))]:
+              d.ellipse((78-44+dx,90-44+dy,78+44+dx,90+44+dy),outline=c,width=16)
+          d.text((132,48),"ОТР",font=ImageFont.truetype(font,72),fill=(245,248,252,255))
+          img.save(out/"09.png")
+          img=Image.new("RGBA",(W,H),(0,0,0,0))
+          d=ImageDraw.Draw(img)
+          for shape,c in [
+              ([(120,34),(150,62),(120,90),(90,62)],(255,67,170,255)),
+              ([(152,34),(182,62),(152,90),(122,62)],(180,39,255,255)),
+              ([(120,92),(150,120),(120,148),(90,120)],(255,81,196,255)),
+              ([(152,92),(182,120),(152,148),(122,120)],(124,59,255,255))
+          ]: d.polygon(shape,fill=c)
+          f=ImageFont.truetype(font,58)
+          bbox=d.textbbox((0,0),"МУЗ",font=f)
+          width=bbox[2]-bbox[0]
+          d.text(((W-width)//2,118),"МУЗ",font=f,fill=(245,248,252,255))
+          img.save(out/"20.png")
+          print("Improved OTR and MUZ TV channel logos embedded")
+          PY
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
       - name: Verify installable APK

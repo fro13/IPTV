@@ -68,3 +68,20 @@ jobs:
           name: MTS_IPTV
           path: app/build/outputs/apk/debug/MTS_IPTV.apk
           if-no-files-found: error
+
+      - name: Publish direct APK download on GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset="app/build/outputs/apk/debug/MTS_IPTV.apk"
+          tag="stable"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --clobber
+            gh release edit "$tag" --notes-file CHANGELOG.md --latest
+          else
+            gh release create "$tag" "$asset" \
+              --target "$GITHUB_SHA" \
+              --title "МТС IPTV" \
+              --notes-file CHANGELOG.md \
+              --latest
+          fi

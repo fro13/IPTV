@@ -59,7 +59,7 @@ public final class MainActivity extends Activity {
     private Media activeMedia;
     private long playStartedAt, lastFrameAt, lastRecoveryAt, lastTimeValue=-1;
     private long lastDisplayedPictures=-1;
-    private boolean videoStarted=false, statsAvailable=false;
+    private boolean videoStarted=false, statsAvailable=false, playingEventSeen=false, playbackError=false;
     private int recoveryAttempts=0;
     private final Runnable watchdog=new Runnable(){
         @Override public void run(){
@@ -73,22 +73,29 @@ public final class MainActivity extends Activity {
                     if(pictures>0 && pictures>lastDisplayedPictures){
                         lastDisplayedPictures=pictures;
                         videoStarted=true;
+                        playbackError=false;
                         lastFrameAt=now;
                     }
                 }
             }catch(Exception ignored){}
-            if(videoStarted && recoveryAttempts>0 && now-lastRecoveryAt>60000)
+            if(videoStarted && recoveryAttempts>0 && now-lastRecoveryAt>60000 && now-lastFrameAt<CHECK_INTERVAL_MS*2)
                 recoveryAttempts=0;
+            // Some devices do not expose video frame stats for UDP. Playing alone is
+            // insufficient evidence of a freeze; avoid needless restart loops.
+            if(!statsAvailable && playingEventSeen && lastTimeValue<0 && !playbackError){
+                handler.postDelayed(this,CHECK_INTERVAL_MS);
+                return;
+            }
             long timeout=videoStarted?STALL_TIMEOUT_MS:STARTUP_TIMEOUT_MS;
             long elapsed=now-(videoStarted?lastFrameAt:playStartedAt);
-            if(elapsed>=timeout && recoveryAttempts<MAX_RECOVERIES){
+            if((playbackError || elapsed>=timeout) && recoveryAttempts<MAX_RECOVERIES){
                 recoveryAttempts++;
                 lastRecoveryAt=now;
                 showStatus("Восстановление потока ("+recoveryAttempts+"/"+MAX_RECOVERIES+")");
                 startPlayer();
                 return;
             }
-            if(elapsed>=timeout && recoveryAttempts==MAX_RECOVERIES){
+            if((playbackError || elapsed>=timeout) && recoveryAttempts==MAX_RECOVERIES){
                 showStatus("Нет видеосигнала. Выберите канал ещё раз.");
                 recoveryAttempts++;
             }
@@ -256,10 +263,14 @@ public final class MainActivity extends Activity {
     }
     private void onPlayerEvent(MediaPlayer p,MediaPlayer.Event event){
         if(p!=player || !viewing)return;
-        if(event.type==MediaPlayer.Event.Playing)
+        if(event.type==MediaPlayer.Event.Playing){
+            playingEventSeen=true;
+            playbackError=false;
             showStatus(channelLabel(current));
-        else if(event.type==MediaPlayer.Event.EncounteredError)
+        }else if(event.type==MediaPlayer.Event.EncounteredError){
+            playbackError=true;
             showStatus("Нет сигнала: "+channelLabel(current));
+        }
         else if(event.type==MediaPlayer.Event.TimeChanged && !statsAvailable){
             long timestamp=event.getTimeChanged();
             if(timestamp>0 && timestamp!=lastTimeValue){
@@ -297,6 +308,8 @@ public final class MainActivity extends Activity {
             lastTimeValue=-1;
             videoStarted=false;
             statsAvailable=false;
+            playingEventSeen=false;
+            playbackError=false;
             showStatus("Подключение: "+channelLabel(current));
             player.play();
             handler.postDelayed(watchdog,CHECK_INTERVAL_MS);
@@ -340,7 +353,7 @@ public final class MainActivity extends Activity {
         ListView list=new ListView(this);list.setDividerHeight(dp(4));list.setPadding(dp(8),0,dp(8),dp(8));
         list.setAdapter(adapter());
         list.setOnItemClickListener((parent,v,position,id)->{menu.dismiss();switchTo(position);});
-        box.addView(list,new LinearLayout.LayoutParams(-1,-1));
+        box.addView(list,new LinearLayout.LayoutParams(-1,0,1));
         menu.setContentView(box);
         Window w=menu.getWindow();
         if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.setLayout(tv?dp(570):-1,(int)(getResources().getDisplayMetrics().heightPixels*0.85));w.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);}

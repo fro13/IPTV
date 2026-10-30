@@ -493,8 +493,13 @@ public final class MainActivity extends Activity {
             portraitMuteButton.setTextSize(18);
             portraitMuteButton.setContentDescription(volumeMuted?"Включить звук":"Выключить звук");
             portraitMuteButton.setOnClickListener(v->{
+                // Keep the last selected level in preferences; muting must not
+                // overwrite it. Move the thumb to zero and restore on unmute.
                 volumeMuted=!volumeMuted;
-                if(player!=null)player.setVolume(volumeMuted?0:getPreferences(0).getInt("volume",75));
+                int restoredLevel=getPreferences(0).getInt("volume",75);
+                int effectiveLevel=volumeMuted?0:restoredLevel;
+                if(player!=null)player.setVolume(effectiveLevel);
+                if(portraitVolumeSlider!=null)portraitVolumeSlider.setProgress(effectiveLevel);
                 refreshPortraitMuteButton();
             });
             LinearLayout.LayoutParams muteParams=new LinearLayout.LayoutParams(dp(50),dp(46));
@@ -517,7 +522,7 @@ public final class MainActivity extends Activity {
                 public void onStartTrackingTouch(SeekBar bar){}
                 public void onStopTrackingTouch(SeekBar bar){}
             });
-            portraitVolumeSlider.setProgress(getPreferences(0).getInt("volume",75));
+            portraitVolumeSlider.setProgress(volumeMuted?0:getPreferences(0).getInt("volume",75));
             volumeRow.addView(portraitVolumeSlider,new LinearLayout.LayoutParams(0,dp(42),1));
             phonePage.addView(volumeRow);
             phonePage.addView(new View(this),new LinearLayout.LayoutParams(1,0,1f));

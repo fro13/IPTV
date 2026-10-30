@@ -199,6 +199,9 @@ public final class MainActivity extends Activity {
         tile.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1,tileSize));
         ImageView logo=new ImageView(this);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        // Bashkortostan 24 has an unusually wide, short logo with transparent padding.
+        // Enlarge just the artwork, not the grid cell, so all 22 tiles stay identical.
+        if(index==21){logo.setScaleX(1.38f);logo.setScaleY(1.38f);}
         Bitmap bitmap=channelLogo(index);
         if(bitmap!=null)logo.setImageBitmap(bitmap);
         FrameLayout.LayoutParams imageParams=new FrameLayout.LayoutParams(-1,-1);

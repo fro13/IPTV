@@ -123,6 +123,21 @@ jobs:
           img.save(out/"20.png")
           print("Improved OTR and MUZ TV channel logos embedded")
           PY
+      - name: Make MIR channel logo readable
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image,ImageDraw,ImageFont
+          path=Path("app/src/main/assets/channel_logos/18.png")
+          img=Image.open(path).convert("RGBA")
+          # Preserve the original multicolour ring. Its black wordmark is
+          # invisible against the app's dark background, so use white lettering.
+          text=ImageDraw.Draw(img)
+          font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",27)
+          text.text((img.width//2,img.height//2),"МИР",font=font,anchor="mm",fill=(255,255,255,255))
+          img.save(path,optimize=True)
+          print("White MIR wordmark embedded")
+          PY
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
       - name: Verify installable APK

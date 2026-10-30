@@ -20,6 +20,8 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
@@ -185,6 +187,15 @@ public final class MainActivity extends Activity {
     private android.graphics.drawable.Drawable tileBg(boolean selected){
         return outlined(selected?0xff11273d:0xff0b1928,12,selected?0xff2189d8:0xff263b4e);
     }
+    // The last played channel is stored for navigation, but the phone grid
+    // highlights a tile only for the duration of a press.
+    private android.graphics.drawable.Drawable momentaryTileBg(){
+        StateListDrawable states=new StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_pressed},
+                outlined(0xff11273d,12,0xff2189d8));
+        states.addState(new int[]{},outlined(0xff0b1928,12,0xff263b4e));
+        return states;
+    }
     private Bitmap channelLogo(int index){
         if(index<0 || index>=logoCache.length)return null;
         if(logoCache[index]!=null)return logoCache[index];
@@ -195,7 +206,7 @@ public final class MainActivity extends Activity {
     }
     private View gridTile(int index,int tileSize){
         FrameLayout tile=new FrameLayout(this);
-        tile.setBackground(tileBg(index==current));
+        tile.setBackground(momentaryTileBg());
         tile.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1,tileSize));
         ImageView logo=new ImageView(this);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -280,6 +291,8 @@ public final class MainActivity extends Activity {
         grid.setHorizontalSpacing(dp(7));grid.setVerticalSpacing(dp(7));
         grid.setPadding(dp(14),dp(7),dp(14),dp(15));
         grid.setClipToPadding(false);grid.setVerticalScrollBarEnabled(false);
+        grid.setChoiceMode(GridView.CHOICE_MODE_NONE);
+        grid.setSelector(new ColorDrawable(Color.TRANSPARENT));
         grid.setBackgroundColor(BG);
         grid.setAdapter(new BaseAdapter(){
             @Override public int getCount(){return names.size();}
@@ -383,6 +396,20 @@ public final class MainActivity extends Activity {
             fp.setMargins(0,dp(10),dp(10),0);frame.addView(fullscreenButton,fp);
             frame.setOnClickListener(v->revealFullscreen());
             surface.setOnClickListener(v->revealFullscreen());
+            // Keep LibVLC's SurfaceView attached to a stable parent. The
+            // frame is resized on rotation rather than moved between parents.
+            phoneRoot.addView(phonePage,new FrameLayout.LayoutParams(-1,-1));
+            FrameLayout.LayoutParams initialVideo=new FrameLayout.LayoutParams(
+                    getResources().getDisplayMetrics().widthPixels-dp(24),videoHeight,
+                    Gravity.TOP|Gravity.LEFT);
+            initialVideo.leftMargin=dp(12);
+            initialVideo.topMargin=dp(70);
+            phoneRoot.addView(frame,initialVideo);
+            videoHost.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,oright,obottom)->{
+                if(viewing && !fullscreenRequested &&
+                   getResources().getConfiguration().orientation!=Configuration.ORIENTATION_LANDSCAPE)
+                    resizePortraitVideo();
+            });
             setContentView(phoneRoot);
             applyPhoneOrientation(getResources().getConfiguration());
             revealFullscreen();
@@ -394,15 +421,25 @@ public final class MainActivity extends Activity {
         super.onConfigurationChanged(config);
         applyPhoneOrientation(config);
     }
-    private void removeParent(View view){
-        if(view!=null && view.getParent() instanceof ViewGroup)
-            ((ViewGroup)view.getParent()).removeView(view);
+    // Only resize the player container. Never reparent the SurfaceView:
+    // LibVLC retains its attached video surface for the entire session.
+    private void resizePortraitVideo(){
+        if(tv || !viewing || phoneRoot==null || videoHost==null || frame==null ||
+           fullscreenRequested || phonePage.getVisibility()!=View.VISIBLE ||
+           videoHost.getWidth()<=0 || videoHost.getHeight()<=0)return;
+        int[] placeholder=new int[2],rootPos=new int[2];
+        videoHost.getLocationOnScreen(placeholder);
+        phoneRoot.getLocationOnScreen(rootPos);
+        FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(
+                videoHost.getWidth(),videoHost.getHeight(),Gravity.TOP|Gravity.LEFT);
+        params.leftMargin=placeholder[0]-rootPos[0];
+        params.topMargin=placeholder[1]-rootPos[1];
+        frame.setLayoutParams(params);
     }
     private void applyPhoneOrientation(Configuration config){
         if(tv || !viewing || phoneRoot==null || frame==null)return;
         boolean landscape=config.orientation==Configuration.ORIENTATION_LANDSCAPE;
-        removeParent(frame);removeParent(controls);
-        phoneRoot.removeAllViews();
+        // Keep both MediaPlayer and VLCVideoLayout connected throughout rotation.
         if(landscape){
             fullscreenRequested=true;
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -410,18 +447,20 @@ public final class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 |View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 |View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-            phoneRoot.addView(frame,new FrameLayout.LayoutParams(-1,-1));
+            phonePage.setVisibility(View.GONE);
+            frame.setLayoutParams(new FrameLayout.LayoutParams(-1,-1,Gravity.TOP|Gravity.LEFT));
             if(fullscreenButton!=null)fullscreenButton.setText("⊟");
             visible=false;
         }else{
             fullscreenRequested=false;
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
             getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
-            videoHost.addView(frame,new FrameLayout.LayoutParams(-1,-1));
-            phoneControlsHost.addView(controls,new FrameLayout.LayoutParams(-1,-2));
-            phoneRoot.addView(phonePage,new FrameLayout.LayoutParams(-1,-1));
+            phonePage.setVisibility(View.VISIBLE);
             if(fullscreenButton!=null)fullscreenButton.setText("⛶");
             visible=true;
+            // Wait for the portrait layout to settle before moving the
+            // persistent layer back over the video placeholder.
+            videoHost.post(()->resizePortraitVideo());
         }
         if(status!=null)status.setVisibility(View.GONE);
         revealFullscreen();

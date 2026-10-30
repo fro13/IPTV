@@ -105,7 +105,7 @@ public final class MainActivity extends Activity {
     private void showBrowser(){
         viewing=false;releasePlayer();
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(BG);
-        TextView title=text("MTS_IPTV",27,true);title.setPadding(dp(18),dp(22),dp(12),dp(8));
+        TextView title=text("МТС IPTV",27,true);title.setPadding(dp(18),dp(22),dp(12),dp(8));
         page.addView(title);
         ListView list=new ListView(this);list.setDividerHeight(dp(4));list.setBackgroundColor(BG);
         list.setPadding(dp(8),dp(4),dp(8),dp(8));list.setClipToPadding(false);
@@ -228,7 +228,7 @@ public final class MainActivity extends Activity {
         if(menu!=null&&menu.isShowing())return;
         menu=new Dialog(this);menu.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setBackgroundColor(BG);
-        box.addView(text("MTS_IPTV  ·  22 канала",22,true));
+        box.addView(text("МТС IPTV  ·  22 канала",22,true));
         ListView list=new ListView(this);list.setDividerHeight(dp(4));list.setPadding(dp(8),0,dp(8),dp(8));
         list.setAdapter(adapter());
         list.setOnItemClickListener((parent,v,position,id)->{menu.dismiss();switchTo(position);});

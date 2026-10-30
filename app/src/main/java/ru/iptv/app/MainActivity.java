@@ -124,6 +124,12 @@ public final class MainActivity extends Activity {
     };
     private WifiManager.MulticastLock lock;
     private Dialog menu;
+    private LinearLayout tvChannelPanel;
+    private LinearLayout tvNowPlaying;
+    private TextView tvPlayingNumber,tvPlayingTitle;
+    private final Runnable hideTvNowPlaying=()->{
+        if(tvNowPlaying!=null)tvNowPlaying.setVisibility(View.GONE);
+    };
     private final Runnable hideStatus=()->{if(status!=null && tv)status.setVisibility(View.GONE);};
 
     @Override public void onCreate(Bundle state){
@@ -151,7 +157,8 @@ public final class MainActivity extends Activity {
             }
         } catch(Exception e){TextView error=new TextView(this);error.setText("Ошибка каналов: "+e);setContentView(error);return;}
         current=Math.max(0,Math.min(names.size()-1,getPreferences(0).getInt("last",0)));
-        if(tv)showPlayer();else showBrowser();
+        // A launch always starts at the channel grid, including on Google TV.
+        showBrowser();
     }
     private int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+0.5f);}
 
@@ -184,7 +191,16 @@ public final class MainActivity extends Activity {
     }
     private String channelLabel(int i){return (i+1)+".  "+names.get(i);}
 
-    private String visibleName(int i){return names.get(i);}
+    private String visibleName(int i){
+        if(tv){
+            if(i==3)return "НТВ";
+            if(i==4)return "Пятый канал";
+            if(i==7)return "Карусель";
+            if(i==8)return "ОТР";
+            if(i==9)return "ТВ Центр";
+        }
+        return names.get(i);
+    }
     private android.graphics.drawable.Drawable tileBg(boolean selected){
         return outlined(selected?0xff11273d:0xff0b1928,12,selected?0xff2189d8:0xff263b4e);
     }
@@ -263,6 +279,7 @@ public final class MainActivity extends Activity {
         return bar;
     }
     private void showBrowser(){
+        if(tv){showTvBrowser();return;}
         viewing=false;fullscreenRequested=false;
         handler.removeCallbacks(hideFullscreen);
         releasePlayer();
@@ -310,6 +327,181 @@ public final class MainActivity extends Activity {
         });
         root.addView(grid,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(root);
+    }
+
+    private android.graphics.drawable.Drawable tvFocusBackground(int normal){
+        StateListDrawable states=new StateListDrawable();
+        GradientDrawable focus=outlined(SELECTED,10,BLUE);
+        focus.setStroke(dp(2),BLUE);
+        states.addState(new int[]{android.R.attr.state_focused},focus);
+        GradientDrawable selected=outlined(SELECTED,10,BLUE);
+        selected.setStroke(dp(2),BLUE);
+        states.addState(new int[]{android.R.attr.state_selected},selected);
+        states.addState(new int[]{},outlined(normal,10,BORDER));
+        return states;
+    }
+    private void prepareTvFocus(View view){
+        view.setId(View.generateViewId());
+        view.setFocusable(true);
+        view.setBackground(tvFocusBackground(PANEL));
+    }
+    private void showTvBrowser(){
+        viewing=false;
+        closeTvChannels();
+        handler.removeCallbacks(hideStatus);
+        handler.removeCallbacks(hideTvNowPlaying);
+        releasePlayer();
+        frame=null;surface=null;status=null;tvNowPlaying=null;
+        getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(BG);
+        root.setPadding(dp(28),dp(20),dp(28),dp(24));
+        LinearLayout header=new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout heading=new LinearLayout(this);
+        heading.setOrientation(LinearLayout.VERTICAL);
+        heading.addView(label("МТС IPTV",27,WHITE,true));
+        heading.addView(label(names.size()+" канала",16,SUB,false));
+        header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        Button settings=button("⚙");
+        settings.setTextSize(24);
+        settings.setContentDescription("Буферизация потока");
+        prepareTvFocus(settings);
+        settings.setOnClickListener(v->showBufferSettings());
+        header.addView(settings,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        root.addView(header,new LinearLayout.LayoutParams(-1,dp(65)));
+        int columns=6, rows=(names.size()+columns-1)/columns;
+        ArrayList<View> tiles=new ArrayList<>();
+        for(int row=0;row<rows;row++){
+            LinearLayout line=new LinearLayout(this);
+            LinearLayout.LayoutParams lineParams=new LinearLayout.LayoutParams(-1,0,1);
+            lineParams.topMargin=dp(8);
+            root.addView(line,lineParams);
+            for(int col=0;col<columns;col++){
+                int index=row*columns+col;
+                View tile;
+                if(index<names.size()){
+                    tile=gridTile(index,0);
+                    prepareTvFocus(tile);
+                    tile.setBackground(tvFocusBackground(0xff0b1928));
+                    // Keep logo/number children out of D-pad focus traversal.
+                    ((ViewGroup)tile).setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+                    if(channelLogo(index)==null){
+                        TextView fallback=label(visibleName(index),16,WHITE,true);
+                        fallback.setGravity(Gravity.CENTER);
+                        fallback.setPadding(dp(8),dp(24),dp(8),dp(4));
+                        ((FrameLayout)tile).addView(fallback,new FrameLayout.LayoutParams(-1,-1));
+                    }
+                    tile.setOnClickListener(v->{current=index;recoveryAttempts=0;showPlayer();});
+                    tiles.add(tile);
+                }else tile=new View(this);
+                LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,-1,1);
+                if(col>0)cell.leftMargin=dp(8);
+                line.addView(tile,cell);
+            }
+        }
+        // Explicit neighbours keep the incomplete last row predictable.
+        for(int i=0;i<tiles.size();i++){
+            View tile=tiles.get(i);
+            tile.setNextFocusLeftId(tiles.get(i%columns==0?i:i-1).getId());
+            tile.setNextFocusRightId(tiles.get(i%columns==columns-1||i==tiles.size()-1?i:i+1).getId());
+            tile.setNextFocusUpId(i<columns?settings.getId():tiles.get(i-columns).getId());
+            tile.setNextFocusDownId(tiles.get(i+columns<tiles.size()?i+columns:i).getId());
+        }
+        if(!tiles.isEmpty())settings.setNextFocusDownId(tiles.get(Math.min(current,tiles.size()-1)).getId());
+        setContentView(root);
+        if(!tiles.isEmpty())tiles.get(Math.min(current,tiles.size()-1)).requestFocus();
+    }
+    private void showTvNowPlaying(){
+        if(!tv||tvNowPlaying==null||tvChannelPanel!=null)return;
+        tvPlayingNumber.setText(String.valueOf(current+1));
+        tvPlayingTitle.setText(visibleName(current));
+        tvNowPlaying.setVisibility(View.VISIBLE);
+        handler.removeCallbacks(hideTvNowPlaying);
+        handler.postDelayed(hideTvNowPlaying,3500);
+    }
+    private void closeTvChannels(){
+        if(tvChannelPanel==null)return;
+        if(frame!=null)frame.removeView(tvChannelPanel);
+        tvChannelPanel=null;
+        if(frame!=null)frame.requestFocus();
+    }
+    private void showTvChannels(){
+        if(!viewing||frame==null||tvChannelPanel!=null)return;
+        handler.removeCallbacks(hideTvNowPlaying);
+        if(tvNowPlaying!=null)tvNowPlaying.setVisibility(View.GONE);
+        tvChannelPanel=new LinearLayout(this);
+        tvChannelPanel.setOrientation(LinearLayout.VERTICAL);
+        tvChannelPanel.setBackgroundColor(0xfa070f1b);
+        tvChannelPanel.setPadding(dp(16),dp(24),dp(16),dp(24));
+        LinearLayout header=new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout heading=new LinearLayout(this);
+        heading.setOrientation(LinearLayout.VERTICAL);
+        heading.addView(label("Каналы",24,WHITE,true));
+        heading.addView(label(names.size()+" канала",14,SUB,false));
+        header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        Button settings=button("⚙");
+        settings.setTextSize(22);
+        settings.setContentDescription("Буферизация потока");
+        prepareTvFocus(settings);
+        settings.setOnClickListener(v->showBufferSettings());
+        header.addView(settings,new LinearLayout.LayoutParams(dp(42),dp(42)));
+        tvChannelPanel.addView(header,new LinearLayout.LayoutParams(-1,dp(60)));
+        ListView list=new ListView(this);
+        list.setId(View.generateViewId());
+        list.setDivider(new ColorDrawable(Color.TRANSPARENT));
+        list.setDividerHeight(dp(5));
+        list.setSelector(new ColorDrawable(Color.TRANSPARENT));
+        list.setItemsCanFocus(false);
+        list.setAdapter(new BaseAdapter(){
+            @Override public int getCount(){return names.size();}
+            @Override public Object getItem(int position){return names.get(position);}
+            @Override public long getItemId(int position){return position;}
+            @Override public View getView(int position,View old,ViewGroup parent){
+                LinearLayout row=new LinearLayout(MainActivity.this);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(8),dp(5),dp(8),dp(5));
+                row.setBackground(tvFocusBackground(0xff0b1928));
+                row.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1,dp(46)));
+                row.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+                TextView number=label(String.valueOf(position+1),14,SUB,false);
+                row.addView(number,new LinearLayout.LayoutParams(dp(25),-1));
+                ImageView logo=new ImageView(MainActivity.this);
+                logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                logo.setImageBitmap(channelLogo(position));
+                row.addView(logo,new LinearLayout.LayoutParams(dp(54),dp(32)));
+                LinearLayout copy=new LinearLayout(MainActivity.this);
+                copy.setOrientation(LinearLayout.VERTICAL);
+                TextView name=label(visibleName(position),16,WHITE,position==current);
+                name.setSingleLine(true);
+                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                copy.addView(name);
+                if(position==current)copy.addView(label("В эфире",12,BLUE,false));
+                LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,-2,1);
+                cp.leftMargin=dp(8);row.addView(copy,cp);
+                row.setContentDescription(channelLabel(position)+(position==current?", В эфире":""));
+                return row;
+            }
+        });
+        list.setOnItemClickListener((parent,v,position,id)->{
+            closeTvChannels();
+            if(position!=current)switchTo(position);
+            else showTvNowPlaying();
+        });
+        settings.setNextFocusDownId(list.getId());
+        list.setNextFocusUpId(settings.getId());
+        // Keep lateral navigation inside the overlay rather than the video.
+        settings.setNextFocusLeftId(settings.getId());
+        settings.setNextFocusRightId(settings.getId());
+        list.setNextFocusLeftId(list.getId());
+        list.setNextFocusRightId(list.getId());
+        tvChannelPanel.addView(list,new LinearLayout.LayoutParams(-1,0,1));
+        int width=Math.max(dp(310),(int)(getResources().getDisplayMetrics().widthPixels*.34f));
+        frame.addView(tvChannelPanel,new FrameLayout.LayoutParams(width,-1,Gravity.RIGHT));
+        list.requestFocus();
+        list.setSelection(current);
     }
 
     // Two diagonal fullscreen arrows, like the YouTube fullscreen toggle.
@@ -449,7 +641,33 @@ public final class MainActivity extends Activity {
             setContentView(phoneRoot);
             applyPhoneOrientation(getResources().getConfiguration());
             revealFullscreen();
-        }else setContentView(frame);
+        }else{
+            frame.setFocusable(true);
+            frame.setFocusableInTouchMode(true);
+            surface.setFocusable(false);
+            tvNowPlaying=new LinearLayout(this);
+            tvNowPlaying.setGravity(Gravity.CENTER_VERTICAL);
+            tvNowPlaying.setPadding(dp(18),dp(12),dp(18),dp(12));
+            tvNowPlaying.setBackground(bg(0xe6070f1b,10));
+            tvPlayingNumber=label("",22,WHITE,true);
+            tvPlayingNumber.setGravity(Gravity.CENTER);
+            tvPlayingNumber.setBackground(bg(BLUE,6));
+            tvNowPlaying.addView(tvPlayingNumber,new LinearLayout.LayoutParams(dp(40),dp(40)));
+            LinearLayout copy=new LinearLayout(this);
+            copy.setOrientation(LinearLayout.VERTICAL);
+            tvPlayingTitle=label("",20,WHITE,true);
+            copy.addView(tvPlayingTitle);
+            copy.addView(label("Прямой эфир",14,SUB,false));
+            LinearLayout.LayoutParams titleParams=new LinearLayout.LayoutParams(-2,-2);
+            titleParams.leftMargin=dp(14);
+            tvNowPlaying.addView(copy,titleParams);
+            FrameLayout.LayoutParams info=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.LEFT);
+            info.setMargins(dp(32),0,0,dp(28));
+            frame.addView(tvNowPlaying,info);
+            tvNowPlaying.setVisibility(View.GONE);
+            setContentView(frame);
+            frame.requestFocus();
+        }
         getPreferences(0).edit().putInt("last",current).apply();
         startPlayer();
     }
@@ -606,6 +824,10 @@ public final class MainActivity extends Activity {
         for(int i=0;i<3;i++){
             final int which=i;
             LinearLayout row=modeRow(i,pending[0]==i);
+            if(tv){
+                prepareTvFocus(row);
+                row.setBackground(tvFocusBackground(pending[0]==i?0xff20374e:0xff152638));
+            }
             LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,dp(76));
             rp.setMargins(0,0,0,dp(8));
             content.addView(row,rp);modes.add(row);
@@ -615,6 +837,7 @@ public final class MainActivity extends Activity {
                     boolean selected=j==which;
                     LinearLayout option=modes.get(j);
                     option.setBackground(outlined(selected?0xff20374e:0xff152638,11,selected?0xff4b7796:0xff2a3e52));
+                    if(tv)option.setBackground(tvFocusBackground(selected?0xff20374e:0xff152638));
                     TextView amount=(TextView)option.getChildAt(2);
                     TextView mark=(TextView)option.getChildAt(3);
                     amount.setTextColor(selected?0xffb7d7f4:WHITE);
@@ -628,6 +851,7 @@ public final class MainActivity extends Activity {
         cancel.setOnClickListener(v->dialog.dismiss());
         Button apply=button("Применить");
         apply.setTextSize(14);apply.setBackground(bg(0xff315576,11));
+        if(tv){prepareTvFocus(cancel);prepareTvFocus(apply);}
         apply.setOnClickListener(v->{
             int chosen=CACHE_OPTIONS[pending[0]];
             boolean changed=chosen!=cacheMs();
@@ -643,6 +867,7 @@ public final class MainActivity extends Activity {
         content.addView(actions);
         dialog.setContentView(content);
         dialog.show();
+        if(tv)modes.get(currentMode).requestFocus();
         Window w=dialog.getWindow();
         if(w!=null){
             w.setBackgroundDrawableResource(android.R.color.transparent);
@@ -659,6 +884,7 @@ public final class MainActivity extends Activity {
             playingEventSeen=true;
             playbackError=false;
             if(status!=null)status.setVisibility(View.GONE);
+            showTvNowPlaying();
         }else if(event.type==MediaPlayer.Event.EncounteredError){
             playbackError=true;
             showStatus("Нет сигнала: "+channelLabel(current));
@@ -741,10 +967,12 @@ public final class MainActivity extends Activity {
         current=(i+names.size())%names.size();
         getPreferences(0).edit().putInt("last",current).apply();
         recoveryAttempts=0;
+        if(tvNowPlaying!=null)tvNowPlaying.setVisibility(View.GONE);
         if(phoneChannelTitle!=null)phoneChannelTitle.setText(visibleName(current));
         startPlayer();
     }
     private void showMenu(){
+        if(tv){showTvChannels();return;}
         if(menu!=null&&menu.isShowing())return;
         menu=new Dialog(this);menu.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setBackgroundColor(BG);
@@ -764,14 +992,18 @@ public final class MainActivity extends Activity {
         list.setSelection(current);list.requestFocus();
     }
     @Override public boolean onKeyDown(int keyCode,KeyEvent e){
-        if(tv&&viewing&&(menu==null||!menu.isShowing())){
+        if(tv&&viewing&&tvChannelPanel==null&&(menu==null||!menu.isShowing())){
             if(keyCode==KeyEvent.KEYCODE_DPAD_UP||keyCode==KeyEvent.KEYCODE_CHANNEL_UP){switchTo(current+1);return true;}
             if(keyCode==KeyEvent.KEYCODE_DPAD_DOWN||keyCode==KeyEvent.KEYCODE_CHANNEL_DOWN){switchTo(current-1);return true;}
-            if(keyCode==KeyEvent.KEYCODE_DPAD_CENTER||keyCode==KeyEvent.KEYCODE_ENTER){showMenu();return true;}
+            if(keyCode==KeyEvent.KEYCODE_DPAD_CENTER||keyCode==KeyEvent.KEYCODE_ENTER){
+                if(e.getRepeatCount()==0)showMenu();
+                return true;
+            }
         }
         return super.onKeyDown(keyCode,e);
     }
     @Override public void onBackPressed(){
+        if(tvChannelPanel!=null){closeTvChannels();return;}
         if(menu!=null&&menu.isShowing()){menu.dismiss();return;}
         if(!tv&&viewing){
             if(fullscreenRequested || getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE){
@@ -780,7 +1012,7 @@ public final class MainActivity extends Activity {
             }else showBrowser();
             return;
         }
-        if(tv&&viewing){showMenu();return;}
+        if(tv&&viewing){showBrowser();return;}
         super.onBackPressed();
     }
     @Override protected void onStop(){
@@ -791,3 +1023,4 @@ public final class MainActivity extends Activity {
     @Override protected void onStart(){super.onStart();if(viewing&&player==null&&surface!=null)startPlayer();}
     @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);releasePlayer();super.onDestroy();}
 }
+

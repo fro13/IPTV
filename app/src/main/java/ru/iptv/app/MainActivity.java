@@ -13,7 +13,6 @@ import android.media.AudioManager;
 import android.widget.BaseAdapter;
 import android.widget.GridView;
 import android.widget.ImageView;
-import android.widget.SeekBar;
 import android.app.UiModeManager;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -30,7 +29,6 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.KeyEvent;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -73,17 +71,9 @@ public final class MainActivity extends Activity {
     private LinearLayout phonePage;
     private TextView phoneChannelTitle;
     private Button fullscreenButton;
-    private Button portraitMuteButton;
-    private SeekBar portraitVolumeSlider;
-    private boolean volumeMuted=false;
-    private VerticalVolumeOverlay landscapeVolume;
     private boolean fullscreenRequested=false, silentRestart=false;
     private final Bitmap[] logoCache=new Bitmap[22];
-    private final Runnable hideFullscreen=()->{
-        if(fullscreenButton!=null)fullscreenButton.setVisibility(View.GONE);
-        if(landscapeVolume!=null && !landscapeVolume.dragging)
-            landscapeVolume.setVisibility(View.GONE);
-    };
+    private final Runnable hideFullscreen=()->{if(fullscreenButton!=null)fullscreenButton.setVisibility(View.GONE);};
     private LibVLC vlc;
     private MediaPlayer player;
     private Media activeMedia;
@@ -138,6 +128,8 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
+        // Let the physical volume buttons control the system media stream.
+        setVolumeControlStream(AudioManager.STREAM_MUSIC);
         getWindow().setBackgroundDrawableResource(android.R.color.black);
         UiModeManager ui=(UiModeManager)getSystemService(UI_MODE_SERVICE);
         tv=(ui!=null && ui.getCurrentModeType()==Configuration.UI_MODE_TYPE_TELEVISION)
@@ -246,12 +238,6 @@ public final class MainActivity extends Activity {
             }
         };
     }
-    private void refreshPortraitMuteButton(){
-        if(portraitMuteButton==null)return;
-        portraitMuteButton.setText(volumeMuted?"◖×":"◖))");
-        portraitMuteButton.setContentDescription(volumeMuted?"Включить звук":"Выключить звук");
-    }
-
     private LinearLayout navigationBar(){
         LinearLayout bar=new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
@@ -281,8 +267,7 @@ public final class MainActivity extends Activity {
         handler.removeCallbacks(hideFullscreen);
         releasePlayer();
         frame=null;surface=null;status=null;controls=null;phoneRoot=null;phonePage=null;
-        phoneChannelTitle=null;fullscreenButton=null;landscapeVolume=null;
-        portraitMuteButton=null;portraitVolumeSlider=null;
+        phoneChannelTitle=null;fullscreenButton=null;
         if(!tv){
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -326,114 +311,9 @@ public final class MainActivity extends Activity {
         root.addView(grid,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(root);
     }
-    // A compact vertical, semi-transparent player-volume overlay. This only
-    // adjusts LibVLC's local playback volume, never the multicast stream.
-    private final class VerticalVolumeOverlay extends View {
-        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
-        private float level;
-        private boolean dragging=false;
-
-        VerticalVolumeOverlay(){
-            super(MainActivity.this);
-            level=Math.max(0f,Math.min(1f,getPreferences(0).getInt("volume",75)/100f));
-            setContentDescription("Громкость IPTV");
-        }
-
-        private void speaker(Canvas c,float x,float y,boolean withWaves){
-            paint.setColor(0xffe8f1fa);
-            paint.setStyle(Paint.Style.FILL);
-            Path speakerShape=new Path();
-            speakerShape.moveTo(x-dp(10),y-dp(4));
-            speakerShape.lineTo(x-dp(5),y-dp(4));
-            speakerShape.lineTo(x+dp(2),y-dp(10));
-            speakerShape.lineTo(x+dp(2),y+dp(10));
-            speakerShape.lineTo(x-dp(5),y+dp(4));
-            speakerShape.lineTo(x-dp(10),y+dp(4));
-            speakerShape.close();
-            c.drawPath(speakerShape,paint);
-            if(withWaves){
-                paint.setStyle(Paint.Style.STROKE);
-                paint.setStrokeWidth(dp(2));
-                paint.setStrokeCap(Paint.Cap.ROUND);
-                c.drawArc(x-dp(3),y-dp(12),x+dp(20),y+dp(12),-58,116,false,paint);
-                paint.setStyle(Paint.Style.FILL);
-            }
-        }
-
-        @Override protected void onDraw(Canvas c){
-            super.onDraw(c);
-            float w=getWidth(), h=getHeight(), center=w/2f;
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColor(0xb9152739);
-            c.drawRoundRect(0,0,w,h,dp(15),dp(15),paint);
-            speaker(c,center-dp(2),dp(29),true);
-            speaker(c,center, h-dp(29),false);
-            float start=dp(67),end=h-dp(66);
-            float rail=dp(7);
-            paint.setColor(0xff516579);
-            c.drawRoundRect(center-rail/2,start,center+rail/2,end,rail/2,rail/2,paint);
-            float knobY=end-(end-start)*level;
-            paint.setColor(0xff2998ec);
-            c.drawRoundRect(center-rail/2,knobY,center+rail/2,end,rail/2,rail/2,paint);
-            paint.setColor(Color.WHITE);
-            c.drawCircle(center,knobY,dp(9),paint);
-        }
-
-        private void adjust(float y){
-            float start=dp(67),end=getHeight()-dp(66);
-            if(end<=start)return;
-            level=Math.max(0f,Math.min(1f,(end-y)/(end-start)));
-            int volume=Math.round(level*100);
-            volumeMuted=false;
-            if(player!=null)player.setVolume(volume);
-            getPreferences(0).edit().putInt("volume",volume).apply();
-            if(portraitVolumeSlider!=null)portraitVolumeSlider.setProgress(volume);
-            refreshPortraitMuteButton();
-            invalidate();
-        }
-
-        @Override public boolean onTouchEvent(MotionEvent event){
-            switch(event.getActionMasked()){
-                case MotionEvent.ACTION_DOWN:
-                    dragging=true;
-                    if(getParent()!=null)getParent().requestDisallowInterceptTouchEvent(true);
-                    handler.removeCallbacks(hideFullscreen);
-                    adjust(event.getY());
-                    return true;
-                case MotionEvent.ACTION_MOVE:
-                    adjust(event.getY());
-                    return true;
-                case MotionEvent.ACTION_UP:
-                    adjust(event.getY());
-                    dragging=false;
-                    handler.removeCallbacks(hideFullscreen);
-                    handler.postDelayed(hideFullscreen,3500);
-                    performClick();
-                    return true;
-                case MotionEvent.ACTION_CANCEL:
-                    dragging=false;
-                    handler.removeCallbacks(hideFullscreen);
-                    handler.postDelayed(hideFullscreen,3500);
-                    return true;
-            }
-            return super.onTouchEvent(event);
-        }
-
-        @Override public boolean performClick(){
-            super.performClick();
-            return true;
-        }
-    }
-
     private void revealFullscreen(){
         if(fullscreenButton==null || tv)return;
         fullscreenButton.setVisibility(View.VISIBLE);
-        if(landscapeVolume!=null){
-            if(getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE){
-                landscapeVolume.setVisibility(View.VISIBLE);
-                landscapeVolume.invalidate();
-            }else landscapeVolume.setVisibility(View.GONE);
-        }
         handler.removeCallbacks(hideFullscreen);
         handler.postDelayed(hideFullscreen,3500);
     }
@@ -486,45 +366,6 @@ public final class MainActivity extends Activity {
             phoneChannelTitle=label(visibleName(current),22,WHITE,true);
             phoneChannelTitle.setGravity(Gravity.CENTER);
             phonePage.addView(phoneChannelTitle,new LinearLayout.LayoutParams(-1,dp(58)));
-            LinearLayout volumeRow=new LinearLayout(this);
-            volumeRow.setGravity(Gravity.CENTER_VERTICAL);
-            volumeRow.setPadding(dp(24),0,dp(24),0);
-            portraitMuteButton=button(volumeMuted?"◖×":"◖))");
-            portraitMuteButton.setTextSize(18);
-            portraitMuteButton.setContentDescription(volumeMuted?"Включить звук":"Выключить звук");
-            portraitMuteButton.setOnClickListener(v->{
-                // Keep the last selected level in preferences; muting must not
-                // overwrite it. Move the thumb to zero and restore on unmute.
-                volumeMuted=!volumeMuted;
-                int restoredLevel=getPreferences(0).getInt("volume",75);
-                int effectiveLevel=volumeMuted?0:restoredLevel;
-                if(player!=null)player.setVolume(effectiveLevel);
-                if(portraitVolumeSlider!=null)portraitVolumeSlider.setProgress(effectiveLevel);
-                refreshPortraitMuteButton();
-            });
-            LinearLayout.LayoutParams muteParams=new LinearLayout.LayoutParams(dp(50),dp(46));
-            muteParams.setMargins(0,0,dp(12),0);
-            volumeRow.addView(portraitMuteButton,muteParams);
-            portraitVolumeSlider=new SeekBar(this);
-            portraitVolumeSlider.setMax(100);
-            portraitVolumeSlider.setProgressTintList(android.content.res.ColorStateList.valueOf(0xff5388bf));
-            portraitVolumeSlider.setThumbTintList(android.content.res.ColorStateList.valueOf(0xffb5cee8));
-            portraitVolumeSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-                public void onProgressChanged(SeekBar bar,int progress,boolean fromUser){
-                    if(fromUser){
-                        // Moving either volume control unmutes and sets a new level.
-                        volumeMuted=false;
-                        if(player!=null)player.setVolume(progress);
-                        getPreferences(0).edit().putInt("volume",progress).apply();
-                        refreshPortraitMuteButton();
-                    }
-                }
-                public void onStartTrackingTouch(SeekBar bar){}
-                public void onStopTrackingTouch(SeekBar bar){}
-            });
-            portraitVolumeSlider.setProgress(volumeMuted?0:getPreferences(0).getInt("volume",75));
-            volumeRow.addView(portraitVolumeSlider,new LinearLayout.LayoutParams(0,dp(42),1));
-            phonePage.addView(volumeRow);
             phonePage.addView(new View(this),new LinearLayout.LayoutParams(1,0,1f));
             controls=navigationBar();
             phoneControlsHost=new FrameLayout(this);
@@ -536,14 +377,6 @@ public final class MainActivity extends Activity {
             fullscreenButton.setOnClickListener(v->toggleFullscreen());
             FrameLayout.LayoutParams fp=new FrameLayout.LayoutParams(dp(45),dp(45),Gravity.TOP|Gravity.RIGHT);
             fp.setMargins(0,dp(10),dp(10),0);frame.addView(fullscreenButton,fp);
-            // This overlay lives in the existing video frame. It never changes
-            // the frame's size or detaches the LibVLC SurfaceView on rotation.
-            landscapeVolume=new VerticalVolumeOverlay();
-            FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(
-                    dp(58),dp(245),Gravity.LEFT|Gravity.CENTER_VERTICAL);
-            lp.setMargins(dp(10),0,0,0);
-            frame.addView(landscapeVolume,lp);
-            landscapeVolume.setVisibility(View.GONE);
             frame.setOnClickListener(v->revealFullscreen());
             surface.setOnClickListener(v->revealFullscreen());
             // Keep LibVLC's SurfaceView attached to a stable parent. The
@@ -821,7 +654,9 @@ public final class MainActivity extends Activity {
                 silentRestart=false;
             }else showStatus("Подключение: "+channelLabel(current));
             player.play();
-            if(!tv)player.setVolume(volumeMuted?0:getPreferences(0).getInt("volume",75));
+            // Output volume is governed by the device's hardware media keys.
+            // Reset the historical in-app attenuation/mute to normal gain.
+            player.setVolume(100);
             handler.postDelayed(watchdog,CHECK_INTERVAL_MS);
         }catch(Exception e){
             showStatus("Ошибка воспроизведения: "+e.getMessage());

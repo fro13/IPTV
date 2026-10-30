@@ -54,6 +54,46 @@ jobs:
             git commit -m "Repair corrupted launcher PNG"
             git push origin HEAD:main
           fi
+      - name: Bundle channel logos for offline display
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw, ImageFont
+          from io import BytesIO
+          from urllib.request import urlopen,Request
+          import time
+          sources=["https://i.imgur.com/1IqCGe9.png","https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Russia-1.svg/960px-Russia-1.svg.png","https://i.imgur.com/kFdooR4.png","https://i.imgur.com/DtQX5P2.png","https://i.imgur.com/u8Q69D9.png","https://i.imgur.com/S12gaLc.png","https://i.imgur.com/tpqsFzm.png","https://i.imgur.com/4fFMlVq.png","https://i.imgur.com/QyZvT3e.png","https://i.imgur.com/ZP0D6Rd.png","https://i.imgur.com/18TAzYV.png","https://i.imgur.com/A6Cqsom.jpeg","https://i.imgur.com/y9bpqUD.png","https://i.imgur.com/e8wlMIt.png","https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/%D0%A2V3_logo_2023.svg/500px-%D0%A2V3_logo_2023.svg.png","https://i.imgur.com/rS11zVB.png","https://i.imgur.com/c0L0ncA.png","https://i.imgur.com/L2slsbG.png","https://i.imgur.com/1WqIPOB.png","https://i.imgur.com/Ml3qqOF.png","https://iptvx.one/picons/bst.png","https://iptvx.one/picons/bashkortostan24.png"]
+          fallbacks=["https://iptvx.one/picons/pervy.png","https://iptvx.one/picons/rossia1.png","https://iptvx.one/picons/matchtv.png","https://iptvx.one/picons/ntv.png","https://iptvx.one/picons/5kanal-ru.png","https://iptvx.one/picons/kultura.png","https://iptvx.one/picons/rossia24.png","https://iptvx.one/picons/karusel.png","https://iptvx.one/picons/otr.png","https://iptvx.one/picons/tvcentr.png","https://iptvx.one/picons/rentv.png","https://iptvx.one/picons/spas.png","https://iptvx.one/picons/sts.png","https://iptvx.one/picons/domashniy.png","https://iptvx.one/picons/tv3-ru.png","https://iptvx.one/picons/piatnica.png","https://iptvx.one/picons/zvezda.png","https://iptvx.one/picons/mir.png","https://iptvx.one/picons/tnt.png","https://iptvx.one/picons/muz-tv.png","https://iptvx.one/picons/bst.png","https://iptvx.one/picons/bashkortostan24.png"]
+          names=["1","Россия 1","МАТЧ!","НТВ","5","Россия К","Россия 24","Карусель","ОТР","ТВЦ","РЕН","СПАС","СТС","Домашний","ТВ-3","Пятница!","Звезда","Мир","ТНТ","МУЗ","БСТ","Башкортостан 24"]
+          out=Path("app/src/main/assets/channel_logos")
+          out.mkdir(parents=True,exist_ok=True)
+          missing=[]
+          for idx,(first,second) in enumerate(zip(sources,fallbacks),1):
+            success=False
+            for url in dict.fromkeys([first,second]):
+              try:
+                req=Request(url,headers={"User-Agent":"Mozilla/5.0 (compatible; AndroidIPTVLogoBuilder/1.0)"})
+                with urlopen(req,timeout=15) as resp: data=resp.read(3000000)
+                img=Image.open(BytesIO(data))
+                img.load()
+                img=img.convert("RGBA")
+                img.thumbnail((288,165), Image.Resampling.LANCZOS)
+                canvas=Image.new("RGBA",(300,180),(0,0,0,0))
+                canvas.alpha_composite(img,((300-img.width)//2,(180-img.height)//2))
+                canvas.save(out/("%02d.png"%idx),optimize=True)
+                print("%02d OK %s %s"%(idx,url,img.size))
+                success=True
+                break
+              except Exception as exc: print("%02d unavailable %s %s"%(idx,url,exc))
+            if not success:
+              missing.append(idx)
+              # Keep every tile usable even if third-party logo CDNs are down.
+              img=Image.new("RGBA",(300,180),(0,0,0,0))
+              d=ImageDraw.Draw(img);d.text((12,78),names[idx-1],fill=(234,243,255,255))
+              img.save(out/("%02d.png"%idx))
+          if missing: print("Logo source unavailable, temporary labeled fallback:",missing)
+          
+          PY
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
       - name: Verify installable APK

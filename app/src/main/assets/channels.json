@@ -136,5 +136,30 @@
     "name": "2×2",
     "url": "https://bl.rutube.ru/livestream/392b4686b770bae2da6bf5ac4574add5/index.m3u8?e=2068731801&s=tenr-yHXUv1wibfka78s2A&scheme=https",
     "networkCachingMs": 2000
+  },
+  {
+    "number": 24,
+    "name": "Animal Planet",
+    "url": "http://stream.mcquack.net/114/index.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 25,
+    "name": "BRIDGE",
+    "url": "http://stream.mcquack.net/318/index.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 26,
+    "name": "Dorama HD",
+    "url": "http://stream.mcquack.net/412/index.m3u8",
+    "networkCachingMs": 2000,
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+  },
+  {
+    "number": 27,
+    "name": "TLC",
+    "url": "http://stream.mcquack.net/168/index.m3u8",
+    "networkCachingMs": 2000
   }
 ]

@@ -60,6 +60,7 @@ public final class MainActivity extends Activity {
     private static final long STARTUP_TIMEOUT_MS=25000, STALL_TIMEOUT_MS=12000, CHECK_INTERVAL_MS=2000;
     private final ArrayList<String> names=new ArrayList<>();
     private final ArrayList<String> urls=new ArrayList<>();
+    private final ArrayList<String> userAgents=new ArrayList<>();
     private final Handler handler=new Handler(Looper.getMainLooper());
     private int current=0;
     private boolean tv=false, viewing=false, visible=true;
@@ -154,6 +155,7 @@ public final class MainActivity extends Activity {
                 if(i==20)name="БСТ";
                 if(i==21)name="Башкортостан 24";
                 names.add(name);urls.add(item.getString("url"));
+                userAgents.add(item.optString("userAgent",""));
                 logoCache.add(null);
             }
         } catch(Exception e){TextView error=new TextView(this);error.setText("Ошибка каналов: "+e);setContentView(error);return;}
@@ -207,10 +209,6 @@ public final class MainActivity extends Activity {
     private LinearLayout sectionHeading(int index,boolean compact){
         LinearLayout heading=new LinearLayout(this);
         heading.setOrientation(LinearLayout.VERTICAL);
-        if(index>0){
-            View divider=new View(this);divider.setBackgroundColor(BORDER);
-            heading.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
-        }
         TextView title=label(isInternetChannel(index)?"Интернет-каналы":"Каналы оператора",
                 compact?13:16,SUB,true);
         title.setPadding(0,dp(compact?8:10),0,dp(compact?6:7));
@@ -971,6 +969,8 @@ public final class MainActivity extends Activity {
             }
             if(activeMedia!=null){activeMedia.release();activeMedia=null;}
             activeMedia=new Media(vlc,Uri.parse(urls.get(current)));
+            if(!userAgents.get(current).isEmpty())
+                activeMedia.addOption(":http-user-agent="+userAgents.get(current));
             int cache=cacheMs();
             activeMedia.addOption(":network-caching="+cache);
             activeMedia.addOption(":live-caching="+cache);

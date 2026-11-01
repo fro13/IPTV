@@ -130,5 +130,11 @@
     "name": "Региональный канал 2",
     "url": "udp://@239.10.2.22:5500",
     "networkCachingMs": 1000
+  },
+  {
+    "number": 23,
+    "name": "2×2",
+    "url": "https://bl.rutube.ru/livestream/392b4686b770bae2da6bf5ac4574add5/index.m3u8?e=2068731801&s=tenr-yHXUv1wibfka78s2A&scheme=https",
+    "networkCachingMs": 2000
   }
 ]

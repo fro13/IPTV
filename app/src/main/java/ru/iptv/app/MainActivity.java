@@ -405,18 +405,27 @@ public final class MainActivity extends Activity {
         settings.setOnClickListener(v->showBufferSettings());
         header.addView(settings,new LinearLayout.LayoutParams(dp(48),dp(48)));
         root.addView(header,new LinearLayout.LayoutParams(-1,dp(65)));
+        ScrollView scroll=new ScrollView(this);
+        scroll.setFocusable(false);
+        scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout groups=new LinearLayout(this);
+        groups.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(groups,new ScrollView.LayoutParams(-1,-2));
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         int columns=6;
+        // Keep logos readable as the list grows; D-pad focus scrolls each row into view.
+        int tileHeight=Math.max(dp(80),(getResources().getDisplayMetrics().widthPixels-dp(96))/columns*2/3);
         ArrayList<View> tiles=new ArrayList<>();
         ArrayList<ArrayList<View>> tileRows=new ArrayList<>();
         for(int start=0;start<names.size();){
             int end=sectionEnd(start);
-            root.addView(sectionHeading(start,false));
+            groups.addView(sectionHeading(start,false));
             for(int first=start;first<end;first+=columns){
                 ArrayList<View> rowTiles=new ArrayList<>();
                 LinearLayout line=new LinearLayout(this);
-                LinearLayout.LayoutParams lineParams=new LinearLayout.LayoutParams(-1,0,1);
+                LinearLayout.LayoutParams lineParams=new LinearLayout.LayoutParams(-1,tileHeight);
                 lineParams.topMargin=dp(8);
-                root.addView(line,lineParams);
+                groups.addView(line,lineParams);
                 for(int col=0;col<columns;col++){
                     final int index=first+col;
                     View tile;

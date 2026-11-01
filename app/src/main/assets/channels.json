@@ -161,5 +161,53 @@
     "name": "TLC",
     "url": "http://stream.mcquack.net/168/index.m3u8",
     "networkCachingMs": 2000
+  },
+  {
+    "number": 28,
+    "name": "Дом кино",
+    "url": "http://stream.mcquack.net/236/index.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 29,
+    "name": "Русский детектив",
+    "url": "http://stream.mcquack.net/204/index.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 30,
+    "name": "Кино ТВ",
+    "url": "http://176.118.197.101/KinoTvHD/playlist.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 31,
+    "name": "Суббота!",
+    "url": "http://stream.mcquack.net/269/index.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 32,
+    "name": "ТНТ4",
+    "url": "http://flussonic.linkintel.ru/tnt4/index.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 33,
+    "name": "Че!",
+    "url": "http://flussonic.linkintel.ru/che/index.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 34,
+    "name": "Дом кино Премиум",
+    "url": "http://stream.mcquack.net/108/index.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 35,
+    "name": "Ю",
+    "url": "https://bl.rutube.ru/livestream/5c9327074e25ca86f3111d4085cbbb65/index.m3u8?e=2066519758&s=9cPc1rCGu6M932eqrifRhQ&scheme=https",
+    "networkCachingMs": 2000
   }
 ]

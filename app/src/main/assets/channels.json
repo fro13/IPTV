@@ -233,5 +233,11 @@
     "name": "Техно 24",
     "url": "http://tv.ttk.mx:9056",
     "networkCachingMs": 2000
+  },
+  {
+    "number": 40,
+    "name": "FUEL TV",
+    "url": "https://amg01074-fueltv-fueltvemeaen-rakuten-b6j62.amagi.tv/hls/amagi_hls_data_rakutenAA-fueltvemeaen/CDN/master.m3u8",
+    "networkCachingMs": 2000
   }
 ]

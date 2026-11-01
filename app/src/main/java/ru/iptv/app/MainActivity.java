@@ -11,7 +11,6 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.media.AudioManager;
 import android.widget.BaseAdapter;
-import android.widget.GridView;
 import android.widget.ImageView;
 import android.app.UiModeManager;
 import android.content.Context;
@@ -38,6 +37,7 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -72,7 +72,7 @@ public final class MainActivity extends Activity {
     private TextView phoneChannelTitle;
     private FullscreenArrowButton fullscreenButton;
     private boolean fullscreenRequested=false, silentRestart=false;
-    private final Bitmap[] logoCache=new Bitmap[22];
+    private final ArrayList<Bitmap> logoCache=new ArrayList<>();
     private final Runnable hideFullscreen=()->{if(fullscreenButton!=null)fullscreenButton.setVisibility(View.GONE);};
     private LibVLC vlc;
     private MediaPlayer player;
@@ -154,6 +154,7 @@ public final class MainActivity extends Activity {
                 if(i==20)name="БСТ";
                 if(i==21)name="Башкортостан 24";
                 names.add(name);urls.add(item.getString("url"));
+                logoCache.add(null);
             }
         } catch(Exception e){TextView error=new TextView(this);error.setText("Ошибка каналов: "+e);setContentView(error);return;}
         current=Math.max(0,Math.min(names.size()-1,getPreferences(0).getInt("last",0)));
@@ -191,6 +192,33 @@ public final class MainActivity extends Activity {
     }
     private String channelLabel(int i){return (i+1)+".  "+names.get(i);}
 
+    private boolean isInternetChannel(int index){
+        String scheme=Uri.parse(urls.get(index)).getScheme();
+        return "http".equalsIgnoreCase(scheme)||"https".equalsIgnoreCase(scheme);
+    }
+    private boolean startsSection(int index){
+        return index==0||isInternetChannel(index)!=isInternetChannel(index-1);
+    }
+    private int sectionEnd(int start){
+        int end=start+1;
+        while(end<names.size()&&!startsSection(end))end++;
+        return end;
+    }
+    private LinearLayout sectionHeading(int index,boolean compact){
+        LinearLayout heading=new LinearLayout(this);
+        heading.setOrientation(LinearLayout.VERTICAL);
+        if(index>0){
+            View divider=new View(this);divider.setBackgroundColor(BORDER);
+            heading.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
+        }
+        TextView title=label(isInternetChannel(index)?"Интернет-каналы":"Каналы оператора",
+                compact?13:16,SUB,true);
+        title.setPadding(0,dp(compact?8:10),0,dp(compact?6:7));
+        heading.addView(title);
+        heading.setFocusable(false);
+        return heading;
+    }
+
     private String visibleName(int i){
         if(tv){
             if(i==3)return "НТВ";
@@ -214,12 +242,12 @@ public final class MainActivity extends Activity {
         return states;
     }
     private Bitmap channelLogo(int index){
-        if(index<0 || index>=logoCache.length)return null;
-        if(logoCache[index]!=null)return logoCache[index];
+        if(index<0 || index>=logoCache.size())return null;
+        if(logoCache.get(index)!=null)return logoCache.get(index);
         try(InputStream in=getAssets().open(String.format(java.util.Locale.US,"channel_logos/%02d.png",index+1))){
-            logoCache[index]=BitmapFactory.decodeStream(in);
+            logoCache.set(index,BitmapFactory.decodeStream(in));
         }catch(Exception ignored){}
-        return logoCache[index];
+        return logoCache.get(index);
     }
     private View gridTile(int index,int tileSize){
         FrameLayout tile=new FrameLayout(this);
@@ -228,7 +256,7 @@ public final class MainActivity extends Activity {
         ImageView logo=new ImageView(this);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
         // Bashkortostan 24 has an unusually wide, short logo with transparent padding.
-        // Enlarge just the artwork, not the grid cell, so all 22 tiles stay identical.
+        // Enlarge just the artwork, not the grid cell.
         if(index==21){logo.setScaleX(1.38f);logo.setScaleY(1.38f);}
         Bitmap bitmap=channelLogo(index);
         if(bitmap!=null)logo.setImageBitmap(bitmap);
@@ -250,7 +278,11 @@ public final class MainActivity extends Activity {
             @Override public View getView(int position,View convert,ViewGroup parent){
                 TextView row=text(labels.get(position),tv?19:16,position==current);
                 row.setMinHeight(dp(54));row.setBackground(tileBg(position==current));
-                return row;
+                LinearLayout item=new LinearLayout(MainActivity.this);
+                item.setOrientation(LinearLayout.VERTICAL);
+                if(startsSection(position))item.addView(sectionHeading(position,true));
+                item.addView(row,new LinearLayout.LayoutParams(-1,-2));
+                return item;
             }
         };
     }
@@ -305,27 +337,31 @@ public final class MainActivity extends Activity {
         root.addView(header);
         final int screenWidth=getResources().getDisplayMetrics().widthPixels;
         final int tileSize=(screenWidth-dp(28)-dp(14))/3;
-        GridView grid=new GridView(this);
-        grid.setNumColumns(3);
-        grid.setColumnWidth(tileSize);grid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
-        grid.setHorizontalSpacing(dp(7));grid.setVerticalSpacing(dp(7));
-        grid.setPadding(dp(14),dp(7),dp(14),dp(15));
-        grid.setClipToPadding(false);grid.setVerticalScrollBarEnabled(false);
-        grid.setChoiceMode(GridView.CHOICE_MODE_NONE);
-        grid.setSelector(new ColorDrawable(Color.TRANSPARENT));
-        grid.setBackgroundColor(BG);
-        grid.setAdapter(new BaseAdapter(){
-            @Override public int getCount(){return names.size();}
-            @Override public Object getItem(int position){return names.get(position);}
-            @Override public long getItemId(int position){return position;}
-            @Override public View getView(int position,View old,ViewGroup parent){
-                return gridTile(position,tileSize);
+        ScrollView scroll=new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout groups=new LinearLayout(this);
+        groups.setOrientation(LinearLayout.VERTICAL);
+        groups.setPadding(dp(14),0,dp(14),dp(15));
+        for(int start=0;start<names.size();){
+            int end=sectionEnd(start);
+            groups.addView(sectionHeading(start,false));
+            for(int first=start;first<end;first+=3){
+                LinearLayout line=new LinearLayout(this);
+                for(int col=0;col<3;col++){
+                    final int index=first+col;
+                    View tile=index<end?gridTile(index,tileSize):new View(this);
+                    if(index<end)tile.setOnClickListener(v->{current=index;recoveryAttempts=0;showPlayer();});
+                    LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,tileSize,1);
+                    if(col>0)cell.leftMargin=dp(7);
+                    line.addView(tile,cell);
+                }
+                LinearLayout.LayoutParams row=new LinearLayout.LayoutParams(-1,tileSize);
+                row.bottomMargin=dp(7);groups.addView(line,row);
             }
-        });
-        grid.setOnItemClickListener((parent,v,pos,id)->{
-            current=pos;recoveryAttempts=0;showPlayer();
-        });
-        root.addView(grid,new LinearLayout.LayoutParams(-1,0,1));
+            start=end;
+        }
+        scroll.addView(groups,new ScrollView.LayoutParams(-1,-2));
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(root);
     }
 
@@ -362,7 +398,7 @@ public final class MainActivity extends Activity {
         LinearLayout heading=new LinearLayout(this);
         heading.setOrientation(LinearLayout.VERTICAL);
         heading.addView(label("МТС IPTV",27,WHITE,true));
-        heading.addView(label(names.size()+" канала",16,SUB,false));
+        heading.addView(label("Всего каналов: "+names.size(),16,SUB,false));
         header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
         Button settings=button("⚙");
         settings.setTextSize(24);
@@ -371,43 +407,57 @@ public final class MainActivity extends Activity {
         settings.setOnClickListener(v->showBufferSettings());
         header.addView(settings,new LinearLayout.LayoutParams(dp(48),dp(48)));
         root.addView(header,new LinearLayout.LayoutParams(-1,dp(65)));
-        int columns=6, rows=(names.size()+columns-1)/columns;
+        int columns=6;
         ArrayList<View> tiles=new ArrayList<>();
-        for(int row=0;row<rows;row++){
-            LinearLayout line=new LinearLayout(this);
-            LinearLayout.LayoutParams lineParams=new LinearLayout.LayoutParams(-1,0,1);
-            lineParams.topMargin=dp(8);
-            root.addView(line,lineParams);
-            for(int col=0;col<columns;col++){
-                int index=row*columns+col;
-                View tile;
-                if(index<names.size()){
-                    tile=gridTile(index,0);
-                    prepareTvFocus(tile);
-                    tile.setBackground(tvFocusBackground(0xff0b1928));
-                    // Keep logo/number children out of D-pad focus traversal.
-                    ((ViewGroup)tile).setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
-                    if(channelLogo(index)==null){
-                        TextView fallback=label(visibleName(index),16,WHITE,true);
-                        fallback.setGravity(Gravity.CENTER);
-                        fallback.setPadding(dp(8),dp(24),dp(8),dp(4));
-                        ((FrameLayout)tile).addView(fallback,new FrameLayout.LayoutParams(-1,-1));
-                    }
-                    tile.setOnClickListener(v->{current=index;recoveryAttempts=0;showPlayer();});
-                    tiles.add(tile);
-                }else tile=new View(this);
-                LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,-1,1);
-                if(col>0)cell.leftMargin=dp(8);
-                line.addView(tile,cell);
+        ArrayList<ArrayList<View>> tileRows=new ArrayList<>();
+        for(int start=0;start<names.size();){
+            int end=sectionEnd(start);
+            root.addView(sectionHeading(start,false));
+            for(int first=start;first<end;first+=columns){
+                ArrayList<View> rowTiles=new ArrayList<>();
+                LinearLayout line=new LinearLayout(this);
+                LinearLayout.LayoutParams lineParams=new LinearLayout.LayoutParams(-1,0,1);
+                lineParams.topMargin=dp(8);
+                root.addView(line,lineParams);
+                for(int col=0;col<columns;col++){
+                    final int index=first+col;
+                    View tile;
+                    if(index<end){
+                        tile=gridTile(index,0);
+                        prepareTvFocus(tile);
+                        tile.setBackground(tvFocusBackground(0xff0b1928));
+                        // Keep logo/number children out of D-pad focus traversal.
+                        ((ViewGroup)tile).setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+                        if(channelLogo(index)==null){
+                            TextView fallback=label(visibleName(index),16,WHITE,true);
+                            fallback.setGravity(Gravity.CENTER);
+                            fallback.setPadding(dp(8),dp(24),dp(8),dp(4));
+                            ((FrameLayout)tile).addView(fallback,new FrameLayout.LayoutParams(-1,-1));
+                        }
+                        tile.setOnClickListener(v->{current=index;recoveryAttempts=0;showPlayer();});
+                        tiles.add(tile);
+                        rowTiles.add(tile);
+                    }else tile=new View(this);
+                    LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,-1,1);
+                    if(col>0)cell.leftMargin=dp(8);
+                    line.addView(tile,cell);
+                }
+                tileRows.add(rowTiles);
             }
+            start=end;
         }
-        // Explicit neighbours keep the incomplete last row predictable.
-        for(int i=0;i<tiles.size();i++){
-            View tile=tiles.get(i);
-            tile.setNextFocusLeftId(tiles.get(i%columns==0?i:i-1).getId());
-            tile.setNextFocusRightId(tiles.get(i%columns==columns-1||i==tiles.size()-1?i:i+1).getId());
-            tile.setNextFocusUpId(i<columns?settings.getId():tiles.get(i-columns).getId());
-            tile.setNextFocusDownId(tiles.get(i+columns<tiles.size()?i+columns:i).getId());
+        // Navigate actual visual rows, including partial rows at section boundaries.
+        for(int r=0;r<tileRows.size();r++){
+            ArrayList<View> row=tileRows.get(r);
+            for(int c=0;c<row.size();c++){
+                View tile=row.get(c);
+                tile.setNextFocusLeftId(row.get(Math.max(0,c-1)).getId());
+                tile.setNextFocusRightId(row.get(Math.min(row.size()-1,c+1)).getId());
+                ArrayList<View> above=r>0?tileRows.get(r-1):null;
+                ArrayList<View> below=r+1<tileRows.size()?tileRows.get(r+1):null;
+                tile.setNextFocusUpId(above==null?settings.getId():above.get(Math.min(c,above.size()-1)).getId());
+                tile.setNextFocusDownId(below==null?tile.getId():below.get(Math.min(c,below.size()-1)).getId());
+            }
         }
         if(!tiles.isEmpty())settings.setNextFocusDownId(tiles.get(Math.min(current,tiles.size()-1)).getId());
         setContentView(root);
@@ -440,7 +490,7 @@ public final class MainActivity extends Activity {
         LinearLayout heading=new LinearLayout(this);
         heading.setOrientation(LinearLayout.VERTICAL);
         heading.addView(label("Каналы",24,WHITE,true));
-        heading.addView(label(names.size()+" канала",14,SUB,false));
+        heading.addView(label("Всего каналов: "+names.size(),14,SUB,false));
         header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
         Button settings=button("⚙");
         settings.setTextSize(22);
@@ -464,7 +514,7 @@ public final class MainActivity extends Activity {
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(dp(8),dp(5),dp(8),dp(5));
                 row.setBackground(tvFocusBackground(0xff0b1928));
-                row.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1,dp(46)));
+                row.setDuplicateParentStateEnabled(true);
                 row.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
                 TextView number=label(String.valueOf(position+1),14,SUB,false);
                 row.addView(number,new LinearLayout.LayoutParams(dp(25),-1));
@@ -481,8 +531,14 @@ public final class MainActivity extends Activity {
                 if(position==current)copy.addView(label("В эфире",12,BLUE,false));
                 LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,-2,1);
                 cp.leftMargin=dp(8);row.addView(copy,cp);
-                row.setContentDescription(channelLabel(position)+(position==current?", В эфире":""));
-                return row;
+                LinearLayout item=new LinearLayout(MainActivity.this);
+                item.setOrientation(LinearLayout.VERTICAL);
+                item.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+                item.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1,-2));
+                if(startsSection(position))item.addView(sectionHeading(position,true));
+                item.addView(row,new LinearLayout.LayoutParams(-1,dp(46)));
+                item.setContentDescription(channelLabel(position)+(position==current?", В эфире":""));
+                return item;
             }
         });
         list.setOnItemClickListener((parent,v,position,id)->{
@@ -1023,4 +1079,3 @@ public final class MainActivity extends Activity {
     @Override protected void onStart(){super.onStart();if(viewing&&player==null&&surface!=null)startPlayer();}
     @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);releasePlayer();super.onDestroy();}
 }
-

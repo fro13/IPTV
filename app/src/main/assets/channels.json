@@ -209,5 +209,29 @@
     "name": "Ю",
     "url": "https://bl.rutube.ru/livestream/5c9327074e25ca86f3111d4085cbbb65/index.m3u8?e=2066519758&s=9cPc1rCGu6M932eqrifRhQ&scheme=https",
     "networkCachingMs": 2000
+  },
+  {
+    "number": 36,
+    "name": "Большая Азия",
+    "url": "https://live-bigasia.cdnvideo.ru/bigasia/bigasia.smil/tracks-v1a1/mono.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 37,
+    "name": "Просвещение",
+    "url": "http://cdn-01.bonus-tv.ru/prosveschenie_edge/tracks-v1a1/index.m3u8",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 38,
+    "name": "История",
+    "url": "http://tv.ttk.mx:9048",
+    "networkCachingMs": 2000
+  },
+  {
+    "number": 39,
+    "name": "Техно 24",
+    "url": "http://tv.ttk.mx:9056",
+    "networkCachingMs": 2000
   }
 ]
